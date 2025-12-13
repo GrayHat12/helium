@@ -22,7 +22,7 @@ $$
     \end{cases} \\
     [\text{Term}] &\to
     \begin{cases}
-        \text{int\_lit} \\
+        \text{int-lit} \\
         \text{ident} \\
     \end{cases}
 \end{align}

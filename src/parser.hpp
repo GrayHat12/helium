@@ -27,9 +27,13 @@ namespace Node
             Token oprator;
             Expression *right_hand;
         };
+        struct Term
+        {
+            std::variant<IntLiteral *, Identifier *> term;
+        };
         struct Expression
         {
-            std::variant<IntLiteral *, Identifier *, Operation *> expression;
+            std::variant<Term *, Operation *> expression;
         };
     };
     namespace Statement
@@ -81,22 +85,58 @@ public:
     }
 
 private:
-    std::optional<Node::Expression::Expression *> parse_expression()
+    std::optional<Node::Expression::Term *> parse_term()
     {
         if (peek().has_value() && peek().value().type == TokenType::INT_LT)
         {
             auto node_expression_int_lit = m_allocator.alloc<Node::Expression::IntLiteral>();
             node_expression_int_lit->int_lit = consume().value();
-            auto node_expression = m_allocator.alloc<Node::Expression::Expression>();
-            node_expression->expression = node_expression_int_lit;
+            auto node_expression = m_allocator.alloc<Node::Expression::Term>();
+            node_expression->term = node_expression_int_lit;
             return node_expression;
         }
         else if (peek().has_value() && peek().value().type == TokenType::IDENT)
         {
             auto node_expression_identifier = m_allocator.alloc<Node::Expression::Identifier>();
             node_expression_identifier->ident = consume().value();
+            auto node_expression = m_allocator.alloc<Node::Expression::Term>();
+            node_expression->term = node_expression_identifier;
+            return node_expression;
+        }
+        else
+        {
+            return {};
+        }
+    }
+    std::optional<Node::Expression::Expression *> parse_expression()
+    {
+        if (auto term = parse_term())
+        {
             auto node_expression = m_allocator.alloc<Node::Expression::Expression>();
-            node_expression->expression = node_expression_identifier;
+            if (peek().has_value() && peek().value().type == TokenType::OPERATOR)
+            {
+                auto left_hand = m_allocator.alloc<Node::Expression::Expression>();
+                left_hand->expression = term.value();
+                auto operation_expression = m_allocator.alloc<Node::Expression::Operation>();
+                auto oprator = consume();
+                if (auto rhs = parse_expression())
+                {
+                    operation_expression->left_hand = left_hand;
+                    operation_expression->oprator = oprator.value();
+                    operation_expression->right_hand = rhs.value();
+
+                    node_expression->expression = operation_expression;
+                }
+                else
+                {
+                    std::cerr << "did ya lose some nuts ya weeb" << std::endl;
+                    exit(EXIT_FAILURE);
+                }
+            }
+            else
+            {
+                node_expression->expression = term.value();
+            }
             return node_expression;
         }
         else
@@ -149,6 +189,41 @@ private:
         }
 
         return op_exit_node;
+    }
+
+    std::optional<Node::Expression::Operation *> parse_operation()
+    {
+        // std::optional<Node::Expression::Operation *> op_operation_node = {};
+        // std::cout << peek().value().type << " : " << peek().value().value.value_or("") << std::endl;
+        if (auto lhs = parse_expression())
+        {
+            auto operation_expression = m_allocator.alloc<Node::Expression::Operation>();
+            if (peek().has_value() && peek().value().type == TokenType::OPERATOR)
+            {
+                auto oprator = consume();
+                if (auto rhs = parse_expression())
+                {
+                    operation_expression->left_hand = lhs.value();
+                    operation_expression->oprator = oprator.value();
+                    operation_expression->right_hand = rhs.value();
+                    return operation_expression;
+                }
+                else
+                {
+                    std::cerr << "did ya lose some nuts ya weeb" << std::endl;
+                    exit(EXIT_FAILURE);
+                }
+            }
+            else
+            {
+                std::cerr << "ya wat is this expression ya dankey" << std::endl;
+                exit(EXIT_FAILURE);
+            }
+        }
+        else
+        {
+            return {};
+        }
     }
 
     std::optional<Node::Statement::Let *> parse_let()

@@ -38,9 +38,9 @@ private:
         m_stack_counter--;
     }
 
-    void generate_expression(const Node::Expression::Expression *expression)
+    void generate_term(const Node::Expression::Term *term)
     {
-        struct ExpressionVisitor
+        struct TermVisitor
         {
             AssGenerator *generator;
 
@@ -63,12 +63,47 @@ private:
                 generator->m_asmout << "    mov rax, " << int_literal->int_lit.value.value() << "\n";
                 generator->stack_push("rax");
             };
+        };
+
+        TermVisitor visitor = {.generator = this};
+        std::visit(visitor, term->term);
+    }
+
+    void generate_expression(const Node::Expression::Expression *expression)
+    {
+        struct ExpressionVisitor
+        {
+            AssGenerator *generator;
+
+            void operator()(const Node::Expression::Term *term) const
+            {
+                generator->generate_term(term);
+            };
             void operator()(const Node::Expression::Operation *operation) const
             {
-                // TODO
-                assert(false); // not implemented
-                // generator->m_asmout << "    mov rax, " << int_literal->int_lit.value.value() << "\n";
-                // generator->stack_push("rax");
+                // std::cout << "Operation encountered " << operation->oprator.value.value() << std::endl;
+                if (operation->oprator.value.value() == "+")
+                {
+                    generator->generate_expression(operation->left_hand);
+                    generator->generate_expression(operation->right_hand);
+                    generator->stack_pop("rax");
+                    generator->stack_pop("rbx");
+                    generator->m_asmout << "    add rax, rbx\n";
+                    generator->stack_push("rax");
+                }
+                else if (operation->oprator.value.value() == "-")
+                {
+                    generator->generate_expression(operation->left_hand);
+                    generator->generate_expression(operation->right_hand);
+                    generator->stack_pop("rax");
+                    generator->stack_pop("rbx");
+                    generator->m_asmout << "    sub rax, rbx\n";
+                    generator->stack_push("rax");
+                }
+                else
+                {
+                    assert(false); // not implemented
+                }
             };
         };
 

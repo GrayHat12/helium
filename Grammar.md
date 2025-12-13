@@ -8,8 +8,7 @@ $$
     \end{cases} \\
     [\text{Expr}] &\to 
     \begin{cases}
-        \text{int\_lit} \\
-        \text{ident} \\
+        [\text{Term}] \\
         [\text{Operation}] \\
     \end{cases} \\
     [\text{Operation}] &\to [\text{Expr}]\space[\text{Operator}]\space[\text{Expr}] \\
@@ -20,6 +19,11 @@ $$
         \text{/} \\
         \text{*} \\
         \text{\%} \\
+    \end{cases} \\
+    [\text{Term}] &\to
+    \begin{cases}
+        \text{int\_lit} \\
+        \text{ident} \\
     \end{cases}
 \end{align}
 $$

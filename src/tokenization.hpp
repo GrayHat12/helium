@@ -116,7 +116,7 @@ public:
             }
             else if (std::find(Operators.begin(), Operators.end(), peek().value()) != Operators.end())
             {
-                tokens.push_back({.type = TokenType::OPERATOR, .value = "" + consume().value()});
+                tokens.push_back({.type = TokenType::OPERATOR, .value = std::string{consume().value()}});
                 continue;
             }
             else if (peek().value() == ';')

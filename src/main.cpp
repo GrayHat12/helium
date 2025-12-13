@@ -113,6 +113,8 @@ int main(int argc, char **argv)
         exit(EXIT_FAILURE);
     }
 
+    // std::cout << prog_node.value().to_string().str() << std::endl;
+
     AssGenerator generator(prog_node.value());
 
     std::string asmcode = generator.generate_program();

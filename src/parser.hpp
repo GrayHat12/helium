@@ -15,10 +15,22 @@ namespace Node
         struct IntLiteral
         {
             Token int_lit;
+            std::stringstream to_string()
+            {
+                std::stringstream out;
+                out << "IntLiteral{.int_lit=" << int_lit.to_string().str() << "}";
+                return out;
+            }
         };
         struct Identifier
         {
             Token ident;
+            std::stringstream to_string()
+            {
+                std::stringstream out;
+                out << "Identifier{.int_lit=" << ident.to_string().str() << "}";
+                return out;
+            }
         };
         struct Expression;
         struct Operation
@@ -30,10 +42,39 @@ namespace Node
         struct Term
         {
             std::variant<IntLiteral *, Identifier *> term;
+            std::stringstream to_string()
+            {
+                std::stringstream out;
+                if (std::holds_alternative<IntLiteral *>(term))
+                {
+                    out << "Term{.expression=" << std::get<IntLiteral *>(term)->to_string().str() << "}";
+                }
+                else if (std::holds_alternative<Identifier *>(term))
+                {
+                    out << "Term{.expression=" << std::get<Identifier *>(term)->to_string().str() << "}";
+                }
+                return out;
+            }
         };
         struct Expression
         {
             std::variant<Term *, Operation *> expression;
+            inline std::stringstream to_string() const
+            {
+                std::stringstream out;
+                if (std::holds_alternative<Operation *>(expression))
+                {
+                    Operation *operation = std::get<Operation *>(expression);
+                    std::stringstream operationout;
+                    operationout << "Operation{.left=" << operation->left_hand->to_string().str() << ", .operator=" << operation->oprator.to_string().str() << ", .right=" << operation->right_hand->to_string().str() << "}";
+                    out << "Expression{.expression=" << operationout.str() << "}";
+                }
+                else if (std::holds_alternative<Term *>(expression))
+                {
+                    out << "Expression{.expression=" << std::get<Term *>(expression)->to_string().str() << "}";
+                }
+                return out;
+            }
         };
     };
     namespace Statement
@@ -41,20 +82,56 @@ namespace Node
         struct Exit
         {
             Expression::Expression *expression;
+            std::stringstream to_string()
+            {
+                std::stringstream out;
+                out << "Exit{.expression=" << expression->to_string().str() << "}";
+                return out;
+            }
         };
         struct Let
         {
             Token identifier;
             Expression::Expression *expression;
+            std::stringstream to_string()
+            {
+                std::stringstream out;
+                out << "Let{.identifier=" << identifier.to_string().str() << ", .expression=" << expression->to_string().str() << "}";
+                return out;
+            }
         };
         struct Statement
         {
             std::variant<Exit *, Let *> statement;
+            std::stringstream to_string()
+            {
+                std::stringstream out;
+                if (std::holds_alternative<Exit *>(statement))
+                {
+                    out << "Statement{.statement=" << std::get<Exit *>(statement)->to_string().str() << "}";
+                }
+                else if (std::holds_alternative<Let *>(statement))
+                {
+                    out << "Statement{.statement=" << std::get<Let *>(statement)->to_string().str() << "}";
+                }
+                return out;
+            }
         };
     };
     struct Program
     {
         std::vector<Statement::Statement *> stmts;
+        std::stringstream to_string()
+        {
+            std::stringstream out;
+            out << "Program{.stmts=[";
+            for (Statement::Statement *statmt : stmts)
+            {
+                out << statmt->to_string().str() << ", ";
+            }
+            out << "]}";
+            return out;
+        }
     };
 }
 

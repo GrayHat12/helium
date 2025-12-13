@@ -36,6 +36,12 @@ struct Token
 {
     TokenType type;
     std::optional<std::string> value;
+    std::stringstream to_string() const
+    {
+        std::stringstream out;
+        out << "Token{.type=" << type << ", .value=" << value.value_or("nil") << "}";
+        return out;
+    }
 };
 
 class Tokenizer

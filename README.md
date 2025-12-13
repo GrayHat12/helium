@@ -15,7 +15,7 @@ let y = 96;
 exit(x);
 ```
 
-```cpp
+```rs
 Program{
     .stmts=[
         Statement{

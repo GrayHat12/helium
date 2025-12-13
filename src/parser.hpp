@@ -5,6 +5,7 @@
 #include <optional>
 #include <variant>
 
+#include "./arena.hpp"
 #include "./tokenization.hpp"
 
 namespace Node
@@ -19,37 +20,44 @@ namespace Node
         {
             Token ident;
         };
+        struct Expression;
+        struct Operation
+        {
+            Expression *left_hand;
+            Token oprator;
+            Expression *right_hand;
+        };
         struct Expression
         {
-            std::variant<IntLiteral, Identifier> expression;
+            std::variant<IntLiteral *, Identifier *, Operation *> expression;
         };
     };
     namespace Statement
     {
         struct Exit
         {
-            Expression::Expression expression;
+            Expression::Expression *expression;
         };
         struct Let
         {
             Token identifier;
-            Expression::Expression expression;
+            Expression::Expression *expression;
         };
         struct Statement
         {
-            std::variant<Exit, Let> statement;
+            std::variant<Exit *, Let *> statement;
         };
     };
     struct Program
     {
-        std::vector<Statement::Statement> stmts;
+        std::vector<Statement::Statement *> stmts;
     };
 }
 
 class Parser
 {
 public:
-    inline explicit Parser(const std::vector<Token> &tokens) : m_tokens(std::move(tokens))
+    inline explicit Parser(const std::vector<Token> &tokens) : m_tokens(std::move(tokens)), m_allocator(1024 * 1024 * 4)
     {
     }
 
@@ -73,15 +81,23 @@ public:
     }
 
 private:
-    std::optional<Node::Expression::Expression> parse_expression()
+    std::optional<Node::Expression::Expression *> parse_expression()
     {
         if (peek().has_value() && peek().value().type == TokenType::INT_LT)
         {
-            return Node::Expression::Expression{.expression = Node::Expression::IntLiteral{.int_lit = consume().value()}};
+            auto node_expression_int_lit = m_allocator.alloc<Node::Expression::IntLiteral>();
+            node_expression_int_lit->int_lit = consume().value();
+            auto node_expression = m_allocator.alloc<Node::Expression::Expression>();
+            node_expression->expression = node_expression_int_lit;
+            return node_expression;
         }
         else if (peek().has_value() && peek().value().type == TokenType::IDENT)
         {
-            return Node::Expression::Expression{.expression = Node::Expression::Identifier{.ident = consume().value()}};
+            auto node_expression_identifier = m_allocator.alloc<Node::Expression::Identifier>();
+            node_expression_identifier->ident = consume().value();
+            auto node_expression = m_allocator.alloc<Node::Expression::Expression>();
+            node_expression->expression = node_expression_identifier;
+            return node_expression;
         }
         else
         {
@@ -89,9 +105,9 @@ private:
         }
     }
 
-    std::optional<Node::Statement::Exit> parse_exit()
+    std::optional<Node::Statement::Exit *> parse_exit()
     {
-        std::optional<Node::Statement::Exit> exit_node = {};
+        std::optional<Node::Statement::Exit *> op_exit_node;
         // std::cout << peek().value().type << " : " << peek().value().value.value_or("") << std::endl;
         if (peek().value().type == TokenType::EXIT && peek(1).has_value() && peek(1).value().type == TokenType::OPEN_PAREN)
         {
@@ -99,7 +115,10 @@ private:
             consume();
             if (auto node_expr = parse_expression())
             {
-                exit_node = Node::Statement::Exit{.expression = node_expr.value()};
+                // exit_node = Node::Statement::Exit{.expression = node_expr.value()};
+                auto exit_node = m_allocator.alloc<Node::Statement::Exit>();
+                exit_node->expression = node_expr.value();
+                op_exit_node = exit_node;
             }
             else
             {
@@ -129,12 +148,12 @@ private:
             }
         }
 
-        return exit_node;
+        return op_exit_node;
     }
 
-    std::optional<Node::Statement::Let> parse_let()
+    std::optional<Node::Statement::Let *> parse_let()
     {
-        std::optional<Node::Statement::Let> let_node = {};
+        std::optional<Node::Statement::Let *> op_let_node = {};
         // std::cout << peek().value().type << " : " << peek().value().value.value_or("") << std::endl;
         if (peek().value().type == TokenType::LET &&
             peek(1).has_value() &&
@@ -147,7 +166,11 @@ private:
             consume();
             if (auto node_expr = parse_expression())
             {
-                let_node = Node::Statement::Let{.identifier = ident, .expression = node_expr.value()};
+                auto let_node = m_allocator.alloc<Node::Statement::Let>();
+                let_node->identifier = ident;
+                let_node->expression = node_expr.value();
+                op_let_node = let_node;
+                // Node::Statement::Let{.identifier = ident, .expression = node_expr.value()};
             }
             else
             {
@@ -166,18 +189,22 @@ private:
             }
         }
 
-        return let_node;
+        return op_let_node;
     }
 
-    std::optional<Node::Statement::Statement> parse_statement()
+    std::optional<Node::Statement::Statement *> parse_statement()
     {
         if (auto exit_node = parse_exit())
         {
-            return Node::Statement::Statement{.statement = exit_node.value()};
+            auto node_statement = m_allocator.alloc<Node::Statement::Statement>();
+            node_statement->statement = exit_node.value();
+            return node_statement;
         }
         else if (auto let_node = parse_let())
         {
-            return Node::Statement::Statement{.statement = let_node.value()};
+            auto node_statement = m_allocator.alloc<Node::Statement::Statement>();
+            node_statement->statement = let_node.value();
+            return node_statement;
         }
         else
         {
@@ -209,4 +236,5 @@ private:
     }
     const std::vector<Token> m_tokens;
     size_t m_index = 0;
+    ArenaAllocator m_allocator;
 };

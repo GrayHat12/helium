@@ -8,6 +8,7 @@
 #include "./tokenization.hpp"
 #include "./parser.hpp"
 #include "./assembly.hpp"
+#include "./arena.hpp"
 
 std::string readFile(char *filepath)
 {
@@ -104,15 +105,15 @@ int main(int argc, char **argv)
     // }
     Parser parser(tokens);
 
-    std::optional<Node::Program> exit_node = parser.parse();
+    std::optional<Node::Program> prog_node = parser.parse();
 
-    if (!exit_node.has_value())
+    if (!prog_node.has_value())
     {
         std::cerr << "ya messed up ya twat" << std::endl;
         exit(EXIT_FAILURE);
     }
 
-    AssGenerator generator(exit_node.value());
+    AssGenerator generator(prog_node.value());
 
     std::string asmcode = generator.generate_program();
 

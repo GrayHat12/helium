@@ -1,4 +1,5 @@
 #pragma once
+#include <algorithm>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -14,6 +15,15 @@ enum class TokenType
     IDENT,
     OPEN_PAREN,
     CLOSE_PAREN,
+    OPERATOR,
+};
+
+const std::vector<char> Operators{
+    '+',
+    '-',
+    '/',
+    '*',
+    '%',
 };
 
 template <typename T>
@@ -102,6 +112,11 @@ public:
                 consume();
                 // std::cout << "Got SEMICL " << buffer << std::endl;
                 tokens.push_back({.type = TokenType::EQUALS});
+                continue;
+            }
+            else if (std::find(Operators.begin(), Operators.end(), peek().value()) != Operators.end())
+            {
+                tokens.push_back({.type = TokenType::OPERATOR, .value = "" + consume().value()});
                 continue;
             }
             else if (peek().value() == ';')

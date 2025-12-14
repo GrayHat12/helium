@@ -83,7 +83,7 @@ private:
                 generator->m_asmout << "    ; generate term" << "\n";
                 generator->generate_term(term);
             };
-            void operator()(Node::Expression::Operation *operation) const
+            void operator()(Node::Expression::Operation *balanced_operation) const
             {
                 // if (auto operation = std::get_if<Node::Expression::Operation *>(&node_expr.value()->expression))
                 // {
@@ -91,7 +91,7 @@ private:
                 // }
                 generator->m_asmout << "    ; generate operation" << "\n";
                 // std::cout << "Operation encountered " << operation_to_string(operation).str() << std::endl;
-                auto balanced_operation = compute_precedence_tree(generator->m_allocator, operation);
+                // auto balanced_operation = compute_precedence_tree(generator->m_allocator, operation);
                 // std::cout << "Operation balancing completed " << operation_to_string(balanced_operation).str() << std::endl;
                 if (balanced_operation->oprator.value.value() == "+")
                 {
@@ -120,7 +120,17 @@ private:
                     generator->generate_expression(balanced_operation->right_hand);
                     generator->stack_pop("rax");
                     generator->stack_pop("rbx");
-                    generator->m_asmout << "    imul rbx\n";
+                    generator->m_asmout << "    mul rbx\n";
+                    generator->stack_push("rax");
+                }
+                else if (balanced_operation->oprator.value.value() == "/")
+                {
+                    generator->m_asmout << "    ; generate divide" << "\n";
+                    generator->generate_expression(balanced_operation->left_hand);
+                    generator->generate_expression(balanced_operation->right_hand);
+                    generator->stack_pop("rbx");
+                    generator->stack_pop("rax");
+                    generator->m_asmout << "    div rbx\n";
                     generator->stack_push("rax");
                 }
                 else

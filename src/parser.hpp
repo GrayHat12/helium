@@ -156,7 +156,7 @@ Node::Expression::Operation *compute_precedence_tree(ArenaAllocator *allocator, 
         auto current_precedence = bin_precedence(operation->oprator).value();
         auto leftop_precedence = bin_precedence(balanced_lhs->oprator).value();
 
-        if (leftop_precedence < current_precedence)
+        if (leftop_precedence <= current_precedence)
         {
             // std::cout << "flipping tree lhs" << std::endl;
             auto newrootop = allocator->alloc<Node::Expression::Operation>();
@@ -206,7 +206,7 @@ Node::Expression::Operation *compute_precedence_tree(ArenaAllocator *allocator, 
 
         auto current_precedence = bin_precedence(operation->oprator).value();
         auto rightop_precedence = bin_precedence(balanced_rhs->oprator).value();
-        if (rightop_precedence < current_precedence)
+        if (rightop_precedence <= current_precedence)
         {
             // std::cout << "flipping tree rhs" << std::endl;
             auto newrootop = allocator->alloc<Node::Expression::Operation>();
@@ -253,7 +253,7 @@ Node::Expression::Operation *compute_precedence_tree(ArenaAllocator *allocator, 
         balanced_operation->right_hand = allocator->alloc<Node::Expression::Expression>();
         balanced_operation->right_hand = operation->right_hand;
     }
-    // std::cout << "l5" << std::endl;
+    // std::cout << "Returning " << Node::Expression::operation_to_string(balanced_operation).str() << std::endl;
     return balanced_operation;
 }
 
@@ -307,7 +307,7 @@ private:
             return {};
         }
     }
-    std::optional<Node::Expression::Expression *> parse_expression()
+    std::optional<Node::Expression::Expression *> parse_expression(bool compute_precedence = true)
     {
         if (auto term = parse_term())
         {
@@ -318,13 +318,22 @@ private:
                 left_hand->expression = term.value();
                 auto operation_expression = m_allocator->alloc<Node::Expression::Operation>();
                 auto oprator = consume();
-                if (auto rhs = parse_expression())
+                if (auto rhs = parse_expression(false))
                 {
                     operation_expression->left_hand = left_hand;
                     operation_expression->oprator = oprator.value();
                     operation_expression->right_hand = rhs.value();
 
-                    node_expression->expression = operation_expression;
+                    if (compute_precedence)
+                    {
+                        // std::cout << "Before reorder " << Node::Expression::operation_to_string(operation_expression).str() << std::endl;
+                        node_expression->expression = compute_precedence_tree(m_allocator, operation_expression);
+                        // std::cout << "After reorder " << node_expression->to_string().str() << std::endl;
+                    }
+                    else
+                    {
+                        node_expression->expression = operation_expression;
+                    }
                 }
                 else
                 {
@@ -388,41 +397,6 @@ private:
         }
 
         return op_exit_node;
-    }
-
-    std::optional<Node::Expression::Operation *> parse_operation()
-    {
-        // std::optional<Node::Expression::Operation *> op_operation_node = {};
-        // std::cout << peek().value().type << " : " << peek().value().value.value_or("") << std::endl;
-        if (auto lhs = parse_expression())
-        {
-            auto operation_expression = m_allocator->alloc<Node::Expression::Operation>();
-            if (peek().has_value() && peek().value().type == TokenType::OPERATOR)
-            {
-                auto oprator = consume();
-                if (auto rhs = parse_expression())
-                {
-                    operation_expression->left_hand = lhs.value();
-                    operation_expression->oprator = oprator.value();
-                    operation_expression->right_hand = rhs.value();
-                    return operation_expression;
-                }
-                else
-                {
-                    std::cerr << "did ya lose some nuts ya weeb" << std::endl;
-                    exit(EXIT_FAILURE);
-                }
-            }
-            else
-            {
-                std::cerr << "ya wat is this expression ya dankey" << std::endl;
-                exit(EXIT_FAILURE);
-            }
-        }
-        else
-        {
-            return {};
-        }
     }
 
     std::optional<Node::Statement::Let *> parse_let()

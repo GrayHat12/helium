@@ -23,7 +23,7 @@ enum class TokenType
 const std::vector<char> Operators{
     '+',
     '-',
-    // '/',
+    '/',
     '*',
     // '%',
 };
@@ -31,7 +31,7 @@ const std::vector<char> Operators{
 const std::unordered_map<std::string, size_t> OperatorPrecedence{
     {"+", 0},
     {"-", 0},
-    // {"/", 0},
+    {"/", 1},
     {"*", 1},
 };
 

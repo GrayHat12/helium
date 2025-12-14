@@ -7,7 +7,7 @@
 class AssGenerator
 {
 public:
-    inline AssGenerator(Node::Program prog) : m_prog(std::move(prog)) {}
+    inline AssGenerator(Node::Program prog, ArenaAllocator *allocator) : m_prog(std::move(prog)), m_allocator(allocator) {}
 
     std::string generate_program()
     {
@@ -20,6 +20,7 @@ public:
         }
 
         // default this runs
+        m_asmout << "    ; default execution\n";
         m_asmout << "    mov rax, 60\n";
         m_asmout << "    mov rdi, 0\n";
         m_asmout << "    syscall";
@@ -53,6 +54,7 @@ private:
                     std::cerr << "ya using undeclared variables ya ass" << std::endl;
                     exit(EXIT_FAILURE);
                 }
+                generator->m_asmout << "    ; generate identifier" << "\n";
                 std::stringstream register_name;
                 const auto &variable = generator->m_variables.at(identifier_node->ident.value.value());
                 register_name << "QWORD [rsp + " << (generator->m_stack_counter - variable.stack_loc - 1) * 8 << "]";
@@ -60,6 +62,7 @@ private:
             };
             void operator()(const Node::Expression::IntLiteral *int_literal) const
             {
+                generator->m_asmout << "    ; generate literal" << "\n";
                 generator->m_asmout << "    mov rax, " << int_literal->int_lit.value.value() << "\n";
                 generator->stack_push("rax");
             };
@@ -77,27 +80,47 @@ private:
 
             void operator()(const Node::Expression::Term *term) const
             {
+                generator->m_asmout << "    ; generate term" << "\n";
                 generator->generate_term(term);
             };
-            void operator()(const Node::Expression::Operation *operation) const
+            void operator()(Node::Expression::Operation *operation) const
             {
-                // std::cout << "Operation encountered " << operation->oprator.value.value() << std::endl;
-                if (operation->oprator.value.value() == "+")
+                // if (auto operation = std::get_if<Node::Expression::Operation *>(&node_expr.value()->expression))
+                // {
+                //     node_expr.value()->expression = compute_precedence_tree(&m_allocator, (*operation));
+                // }
+                generator->m_asmout << "    ; generate operation" << "\n";
+                // std::cout << "Operation encountered " << operation_to_string(operation).str() << std::endl;
+                auto balanced_operation = compute_precedence_tree(generator->m_allocator, operation);
+                // std::cout << "Operation balancing completed " << operation_to_string(balanced_operation).str() << std::endl;
+                if (balanced_operation->oprator.value.value() == "+")
                 {
-                    generator->generate_expression(operation->left_hand);
-                    generator->generate_expression(operation->right_hand);
+                    generator->m_asmout << "    ; generate add" << "\n";
+                    generator->generate_expression(balanced_operation->left_hand);
+                    generator->generate_expression(balanced_operation->right_hand);
                     generator->stack_pop("rax");
                     generator->stack_pop("rbx");
                     generator->m_asmout << "    add rax, rbx\n";
                     generator->stack_push("rax");
                 }
-                else if (operation->oprator.value.value() == "-")
+                else if (balanced_operation->oprator.value.value() == "-")
                 {
-                    generator->generate_expression(operation->left_hand);
-                    generator->generate_expression(operation->right_hand);
+                    generator->m_asmout << "    ; generate subtract" << "\n";
+                    generator->generate_expression(balanced_operation->left_hand);
+                    generator->generate_expression(balanced_operation->right_hand);
+                    generator->stack_pop("rbx");
+                    generator->stack_pop("rax");
+                    generator->m_asmout << "    sub rax, rbx\n";
+                    generator->stack_push("rax");
+                }
+                else if (balanced_operation->oprator.value.value() == "*")
+                {
+                    generator->m_asmout << "    ; generate multiply" << "\n";
+                    generator->generate_expression(balanced_operation->left_hand);
+                    generator->generate_expression(balanced_operation->right_hand);
                     generator->stack_pop("rax");
                     generator->stack_pop("rbx");
-                    generator->m_asmout << "    sub rax, rbx\n";
+                    generator->m_asmout << "    imul rbx\n";
                     generator->stack_push("rax");
                 }
                 else
@@ -119,6 +142,7 @@ private:
 
             void operator()(const Node::Statement::Exit *exit_node) const
             {
+                generator->m_asmout << "    ; generate exit" << "\n";
                 generator->generate_expression(exit_node->expression);
                 generator->m_asmout << "    mov rax, 60\n";
                 generator->stack_pop("rdi");
@@ -133,7 +157,7 @@ private:
                     std::cerr << "ya reusin variables ya bitch" << std::endl;
                     exit(EXIT_FAILURE);
                 }
-
+                generator->m_asmout << "    ; generate variable" << "\n";
                 generator->m_variables.insert({
                     let_node->identifier.value.value(),
                     Variable{.stack_loc = generator->m_stack_counter},
@@ -165,4 +189,5 @@ private:
     std::stringstream m_asmout;
     size_t m_stack_counter = 0;
     std::unordered_map<std::string, Variable> m_variables;
+    ArenaAllocator *m_allocator;
 };

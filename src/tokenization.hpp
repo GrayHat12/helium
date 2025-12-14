@@ -1,9 +1,11 @@
 #pragma once
+#include <cassert>
 #include <algorithm>
 #include <iostream>
 #include <string>
 #include <vector>
 #include <optional>
+#include <unordered_map>
 
 enum class TokenType
 {
@@ -21,9 +23,16 @@ enum class TokenType
 const std::vector<char> Operators{
     '+',
     '-',
-    '/',
+    // '/',
     '*',
-    '%',
+    // '%',
+};
+
+const std::unordered_map<std::string, size_t> OperatorPrecedence{
+    {"+", 0},
+    {"-", 0},
+    // {"/", 0},
+    {"*", 1},
 };
 
 template <typename T>
@@ -43,6 +52,25 @@ struct Token
         return out;
     }
 };
+
+std::optional<size_t> bin_precedence(Token token)
+{
+    if (token.type == TokenType::OPERATOR)
+    {
+        if (OperatorPrecedence.count(token.value.value()) > 0)
+        {
+            return OperatorPrecedence.at(token.value.value());
+        }
+        else
+        {
+            assert(false); // not supported;
+        }
+    }
+    else
+    {
+        return {};
+    }
+}
 
 class Tokenizer
 {

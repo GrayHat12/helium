@@ -103,7 +103,8 @@ int main(int argc, char **argv)
     // {
     //     std::cout << token.type << " : " << token.value.value_or("") << std::endl;
     // }
-    Parser parser(tokens);
+    ArenaAllocator allocator(1024 * 1024 * 4);
+    Parser parser(tokens, &allocator);
 
     std::optional<Node::Program> prog_node = parser.parse();
 
@@ -113,11 +114,11 @@ int main(int argc, char **argv)
         exit(EXIT_FAILURE);
     }
 
-    // std::cout << prog_node.value().to_string().str() << std::endl;
-
-    AssGenerator generator(prog_node.value());
+    AssGenerator generator(prog_node.value(), &allocator);
 
     std::string asmcode = generator.generate_program();
+
+    // std::cout << prog_node.value().to_string().str() << std::endl;
 
     // std::cout << asmcode.str() << std::endl;
 

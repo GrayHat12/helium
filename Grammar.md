@@ -14,11 +14,11 @@ $$
     [\text{Operation}] &\to [\text{Expr}]\space[\text{Operator}]\space[\text{Expr}] \\
     [\text{Operator}] &\to 
     \begin{cases}
-        \text{+} \\
-        \text{-} \\
-        \text{/} \\
-        \text{*} \\
-        \text{\%} \\
+        \text{+} & \text{prec}=0 \\
+        \text{-} & \text{prec}=0 \\
+        \text{/} & \text{prec}=1 \\
+        \text{*} & \text{prec}=1 \\
+        \text{\%} & \text{prec}=0 \\
     \end{cases} \\
     [\text{Term}] &\to
     \begin{cases}

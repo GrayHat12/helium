@@ -249,12 +249,26 @@ private:
             {
                 generator.generate_expression(if_node->expression);
                 generator.stack_pop("rax");
-                auto iflabel = generator.create_label();
+                // auto iflabel = generator.create_label();
+                auto elselabel = generator.create_label();
+                auto skiplabel = generator.create_label();
                 generator.m_asmout << "    test rax, rax" << "\n";
-                generator.m_asmout << "    jz " << iflabel << "\n";
-                generator.generate_scope(if_node->scope);
-                generator.m_asmout << iflabel << ":" << "\n";
                 if (if_node->else_.has_value()) {
+                    generator.m_asmout << "    ; jump to else" << "\n";
+                    generator.m_asmout << "    jz " << elselabel << "\n";
+                }
+                else {
+                    generator.m_asmout << "    ; jump to skip" << "\n";
+                    generator.m_asmout << "    jz " << skiplabel << "\n";
+                }
+                generator.m_asmout << "    ; inside if" << "\n";
+                generator.generate_scope(if_node->scope);
+                generator.m_asmout << "    jmp " << skiplabel << "\n";
+
+                // generator.m_asmout << iflabel << ":" << "\n";
+                if (if_node->else_.has_value()) {
+                    generator.m_asmout << elselabel << ":" << "\n";
+                    generator.m_asmout << "    ; inside else" << "\n";
                     if (std::holds_alternative<Node::Scope*>(if_node->else_.value()->else_)) {
                         auto scope = std::get<Node::Scope*>(if_node->else_.value()->else_);
                         generator.generate_scope(scope);
@@ -263,7 +277,11 @@ private:
                         auto elseifnode = std::get<Node::Statement::If*>(if_node->else_.value()->else_);
                         (*this)(elseifnode);
                     }
+                    generator.m_asmout << "    jmp " << skiplabel << "\n";
                 }
+
+                generator.m_asmout << skiplabel << ":" << "\n";
+                generator.m_asmout << "    ; outside if-elif chain" << "\n";
             };
         };
 

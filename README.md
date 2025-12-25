@@ -101,3 +101,9 @@ just build
 ```sh
 ./build/helium <input.he> <output>
 ```
+
+## Example
+
+```sh
+./build/helium test/test.he out && ./out; echo $?
+```

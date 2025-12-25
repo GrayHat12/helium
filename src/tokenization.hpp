@@ -21,6 +21,7 @@ enum class TokenType {
     OPEN_CURLY,
     CLOSE_CURLY,
     IF,
+    ELSE,
 };
 
 const std::vector<std::pair<std::string, std::string>> Comments = {
@@ -104,6 +105,12 @@ public:
                 }
                 if (buffer == "if") {
                     tokens.push_back({ .type = TokenType::IF });
+                    // std::cout << "Got Exit " << buffer << std::endl;
+                    buffer.clear();
+                    continue;
+                }
+                if (buffer == "else") {
+                    tokens.push_back({ .type = TokenType::ELSE });
                     // std::cout << "Got Exit " << buffer << std::endl;
                     buffer.clear();
                     continue;

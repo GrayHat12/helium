@@ -109,7 +109,7 @@ int main(int argc, char** argv)
 
     std::string asmcode = generator.generate_program();
 
-    std::cout << prog_node.value().to_string().str() << std::endl;
+    // std::cout << prog_node.value().to_string().str() << std::endl;
 
     // std::cout << asmcode.str() << std::endl;
 

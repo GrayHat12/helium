@@ -139,12 +139,54 @@ struct Let {
         return out;
     }
 };
+struct Else;
 struct If {
     Node::Expression::Expression* expression;
     Node::Scope* scope;
+    std::optional<Else*> else_;
+};
+
+struct Else {
+    std::variant<If*, Scope*> else_;
 };
 struct Statement {
     std::variant<Exit*, Let*, Scope*, If*> statement;
+
+    [[nodiscard]] std::stringstream to_string(If* ifnode) const
+    {
+        std::stringstream out;
+        out << "If{.expression=" << ifnode->expression->to_string().str() << ",.scope=[";
+        for (Statement* statmt : ifnode->scope->stmts) {
+            out << statmt->to_string().str() << ", ";
+        }
+        out << "],";
+        if (ifnode->else_.has_value()) {
+            if (std::holds_alternative<Scope*>(ifnode->else_.value()->else_)) {
+                auto scope = std::get<Scope*>(ifnode->else_.value()->else_);
+                out << ".else=";
+                out << to_string(scope).str();
+                out << ",";
+            }
+            else if (std::holds_alternative<If*>(ifnode->else_.value()->else_)) {
+                auto if_node = std::get<If*>(ifnode->else_.value()->else_);
+                out << ".else=" << to_string(if_node).str() << "}";
+            }
+        }
+        out << "}";
+        return out;
+    }
+
+    [[nodiscard]] std::stringstream to_string(Scope* scope) const
+    {
+        std::stringstream out;
+        out << "Scope{.stmts=[";
+        for (Statement* statmt : scope->stmts) {
+            out << statmt->to_string().str() << ", ";
+        }
+        out << "]}";
+        return out;
+    }
+
     [[nodiscard]] std::stringstream to_string() const
     {
         std::stringstream out;
@@ -164,11 +206,7 @@ struct Statement {
         }
         else if (std::holds_alternative<If*>(statement)) {
             auto ifnode = std::get<If*>(statement);
-            out << "Statement{.statement=If{.expression=" << ifnode->expression->to_string().str() << ",.scope=[";
-            for (Statement* statmt : ifnode->scope->stmts) {
-                out << statmt->to_string().str() << ", ";
-            }
-            out << "]}}";
+            out << "Statement{.statement=" << to_string(ifnode).str() << "}";
         }
         return out;
     }
@@ -404,6 +442,28 @@ private:
         return {};
     }
 
+    std::optional<Node::Statement::Else*> parse_else()
+    {
+        if (peek().has_value() && peek().value().type == TokenType::ELSE) {
+            consume();
+            auto else_statement = m_allocator->alloc<Node::Statement::Else>();
+            auto ifnode = parse_if();
+            if (ifnode.has_value()) {
+                else_statement->else_ = ifnode.value();
+            }
+            else {
+                auto scope = parse_scope();
+                if (!scope.has_value()) {
+                    std::cerr << "if then wat mf. say it, type it. don't fuck it up" << std::endl;
+                    exit(EXIT_FAILURE);
+                }
+                else_statement->else_ = scope.value();
+            }
+            return else_statement;
+        }
+        return {};
+    }
+
     std::optional<Node::Statement::If*> parse_if()
     {
         if (peek().has_value() && peek().value().type == TokenType::IF) {
@@ -422,6 +482,8 @@ private:
             auto if_statement = m_allocator->alloc<Node::Statement::If>();
             if_statement->expression = expression.value();
             if_statement->scope = scope.value();
+            auto else_statement = parse_else();
+            if_statement->else_ = else_statement;
             return if_statement;
         }
         return {};

@@ -4,6 +4,7 @@
 #include <cassert>
 #include <ranges>
 #include <utility>
+#include <variant>
 
 class AssGenerator {
 public:
@@ -220,11 +221,21 @@ private:
             {
                 generator.generate_expression(if_node->expression);
                 generator.stack_pop("rax");
-                auto label = generator.create_label();
+                auto iflabel = generator.create_label();
                 generator.m_asmout << "    test rax, rax" << "\n";
-                generator.m_asmout << "    jz " << label << "\n";
+                generator.m_asmout << "    jz " << iflabel << "\n";
                 generator.generate_scope(if_node->scope);
-                generator.m_asmout << label << ":" << "\n";
+                generator.m_asmout << iflabel << ":" << "\n";
+                if (if_node->else_.has_value()) {
+                    if (std::holds_alternative<Node::Scope*>(if_node->else_.value()->else_)) {
+                        auto scope = std::get<Node::Scope*>(if_node->else_.value()->else_);
+                        generator.generate_scope(scope);
+                    }
+                    else {
+                        auto elseifnode = std::get<Node::Statement::If*>(if_node->else_.value()->else_);
+                        (*this)(elseifnode);
+                    }
+                }
             };
         };
 

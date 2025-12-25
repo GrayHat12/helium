@@ -1,9 +1,8 @@
 let x = 0;
-{
-    let y = 2;
-    if x + 1 {
-        exit(69);
-    }
+if x {
+    exit(69);
+} else if x + 0 {
+    exit(42);
+} else {
+    exit(96);
 }
-let y = x + 5;
-exit(y);

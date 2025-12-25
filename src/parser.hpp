@@ -12,6 +12,15 @@
 
 namespace Node
 {
+
+    namespace Statement
+    {
+        struct Statement;
+    }
+    struct Scope
+    {
+        std::vector<Statement::Statement *> stmts;
+    };
     namespace Expression
     {
         struct IntLiteral
@@ -146,9 +155,14 @@ namespace Node
                 return out;
             }
         };
+        struct If
+        {
+            Node::Expression::Expression *expression;
+            Node::Scope *scope;
+        };
         struct Statement
         {
-            std::variant<Exit *, Let *> statement;
+            std::variant<Exit *, Let *, Scope *, If *> statement;
             std::stringstream to_string()
             {
                 std::stringstream out;
@@ -159,6 +173,26 @@ namespace Node
                 else if (std::holds_alternative<Let *>(statement))
                 {
                     out << "Statement{.statement=" << std::get<Let *>(statement)->to_string().str() << "}";
+                }
+                else if (std::holds_alternative<Scope *>(statement))
+                {
+                    auto scope = std::get<Scope *>(statement);
+                    out << "Statement{.statement=Scope{.stmts=[";
+                    for (Statement *statmt : scope->stmts)
+                    {
+                        out << statmt->to_string().str() << ", ";
+                    }
+                    out << "]}}";
+                }
+                else if (std::holds_alternative<If *>(statement))
+                {
+                    auto ifnode = std::get<If *>(statement);
+                    out << "Statement{.statement=If{.expression=" << ifnode->expression->to_string().str() << ",.scope=[";
+                    for (Statement *statmt : ifnode->scope->stmts)
+                    {
+                        out << statmt->to_string().str() << ", ";
+                    }
+                    out << "]}}";
                 }
                 return out;
             }
@@ -407,6 +441,56 @@ private:
         return op_let_node;
     }
 
+    std::optional<Node::Scope *> parse_scope()
+    {
+        if (peek().has_value() && peek().value().type == TokenType::OPEN_CURLY)
+        {
+            consume();
+            auto scope = m_allocator->alloc<Node::Scope>();
+            while (auto statement = parse_statement())
+            {
+                scope->stmts.push_back(statement.value());
+            }
+            if (peek().has_value() && peek().value().type == TokenType::CLOSE_CURLY)
+            {
+                consume();
+            }
+            else
+            {
+                std::cerr << "ya need em iq pointz to close ya scopes mf" << std::endl;
+                exit(EXIT_FAILURE);
+            }
+            return scope;
+        }
+        return {};
+    }
+
+    std::optional<Node::Statement::If *> parse_if()
+    {
+        if (peek().has_value() && peek().value().type == TokenType::IF)
+        {
+            // std::cout << "checking if " << peek().value().to_string().str() << std::endl;
+            consume();
+            auto expression = parse_expression();
+            if (!expression.has_value())
+            {
+                std::cerr << "if what mf! if what ? be clear" << std::endl;
+                exit(EXIT_FAILURE);
+            }
+            auto scope = parse_scope();
+            if (!scope.has_value())
+            {
+                std::cerr << "if then wat mf. say it, type it. don't fuck it up" << std::endl;
+                exit(EXIT_FAILURE);
+            }
+            auto if_statement = m_allocator->alloc<Node::Statement::If>();
+            if_statement->expression = expression.value();
+            if_statement->scope = scope.value();
+            return if_statement;
+        }
+        return {};
+    }
+
     std::optional<Node::Statement::Statement *> parse_statement()
     {
         if (auto exit_node = parse_exit())
@@ -420,6 +504,18 @@ private:
             auto node_statement = m_allocator->alloc<Node::Statement::Statement>();
             node_statement->statement = let_node.value();
             return node_statement;
+        }
+        else if (auto scope_node = parse_scope())
+        {
+            auto scope_statement = m_allocator->alloc<Node::Statement::Statement>();
+            scope_statement->statement = scope_node.value();
+            return scope_statement;
+        }
+        else if (auto if_node = parse_if())
+        {
+            auto if_statement = m_allocator->alloc<Node::Statement::Statement>();
+            if_statement->statement = if_node.value();
+            return if_statement;
         }
         else
         {

@@ -18,6 +18,9 @@ enum class TokenType
     OPEN_PAREN,
     CLOSE_PAREN,
     OPERATOR,
+    OPEN_CURLY,
+    CLOSE_CURLY,
+    IF,
 };
 
 const std::vector<char> Operators{
@@ -108,6 +111,13 @@ public:
                     buffer.clear();
                     continue;
                 }
+                else if (buffer == "if")
+                {
+                    tokens.push_back({.type = TokenType::IF});
+                    // std::cout << "Got Exit " << buffer << std::endl;
+                    buffer.clear();
+                    continue;
+                }
                 else
                 {
                     tokens.push_back({.type = TokenType::IDENT, .value = buffer});
@@ -139,6 +149,18 @@ public:
             {
                 consume();
                 tokens.push_back({.type = TokenType::CLOSE_PAREN});
+                continue;
+            }
+            else if (peek().value() == '{')
+            {
+                consume();
+                tokens.push_back({.type = TokenType::OPEN_CURLY});
+                continue;
+            }
+            else if (peek().value() == '}')
+            {
+                consume();
+                tokens.push_back({.type = TokenType::CLOSE_CURLY});
                 continue;
             }
             else if (peek().value() == '=')

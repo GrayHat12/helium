@@ -1,10 +1,13 @@
 $$
 \begin{align}
     [\text{Prog}] &\to [\text{Stmt}]^* \\
+    [\text{Scope}] &\to [\{\text{Stmt}]^*\} \\
     [\text{Stmt}] &\to 
     \begin{cases} 
     exit([\text{Expr}]); \\
-    let\space\text{ident} = [\text{Expr}];
+    let\space\text{ident} = [\text{Expr}]; \\
+    \text{if}\space[\text{Expr}][\text{Scope}] \\
+    [\text{Scope}] \\
     \end{cases} \\
     [\text{Expr}] &\to 
     \begin{cases}

@@ -22,6 +22,7 @@ enum class TokenType {
     CLOSE_CURLY,
     IF,
     ELSE,
+    MUTABLE,
 };
 
 const std::vector<std::pair<std::string, std::string>> Comments = {
@@ -99,6 +100,12 @@ public:
                 }
                 if (buffer == "let") {
                     tokens.push_back({ .type = TokenType::LET });
+                    // std::cout << "Got Exit " << buffer << std::endl;
+                    buffer.clear();
+                    continue;
+                }
+                if (buffer == "mut") {
+                    tokens.push_back({ .type = TokenType::MUTABLE });
                     // std::cout << "Got Exit " << buffer << std::endl;
                     buffer.clear();
                     continue;

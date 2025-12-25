@@ -131,11 +131,23 @@ struct Exit {
 struct Let {
     Token identifier;
     Expression::Expression* expression;
+    bool mutable_;
     [[nodiscard]] std::stringstream to_string() const
     {
         std::stringstream out;
-        out << "Let{.identifier=" << identifier.to_string().str() << ", .expression=" << expression->to_string().str()
-            << "}";
+        out << "Let{.identifier=" << identifier.to_string().str() << ", .mutable=" << mutable_
+            << ", .expression=" << expression->to_string().str() << "}";
+        return out;
+    }
+};
+struct Assignment {
+    Token identifier;
+    Expression::Expression* expression;
+    [[nodiscard]] std::stringstream to_string() const
+    {
+        std::stringstream out;
+        out << "Assign{.identifier=" << identifier.to_string().str()
+            << ", .expression=" << expression->to_string().str() << "}";
         return out;
     }
 };
@@ -150,7 +162,7 @@ struct Else {
     std::variant<If*, Scope*> else_;
 };
 struct Statement {
-    std::variant<Exit*, Let*, Scope*, If*> statement;
+    std::variant<Exit*, Let*, Scope*, If*, Assignment*> statement;
 
     [[nodiscard]] std::stringstream to_string(If* ifnode) const
     {
@@ -195,6 +207,9 @@ struct Statement {
         }
         else if (std::holds_alternative<Let*>(statement)) {
             out << "Statement{.statement=" << std::get<Let*>(statement)->to_string().str() << "}";
+        }
+        else if (std::holds_alternative<Assignment*>(statement)) {
+            out << "Statement{.statement=" << std::get<Assignment*>(statement)->to_string().str() << "}";
         }
         else if (std::holds_alternative<Scope*>(statement)) {
             auto scope = std::get<Scope*>(statement);
@@ -393,20 +408,62 @@ private:
     {
         std::optional<Node::Statement::Let*> op_let_node = {};
         // std::cout << "let " << peek().value().type << " : " << peek().value().value.value_or("") << std::endl;
-        if (peek().value().type == TokenType::LET && peek(1).has_value() && peek(1).value().type == TokenType::IDENT
-            && peek(2).has_value() && peek(2).value().type == TokenType::EQUALS) {
-            consume();
+        if (peek().value().type == TokenType::LET) {
+            auto non_mutable = peek(1).has_value() && peek(1).value().type == TokenType::IDENT && peek(2).has_value()
+                && peek(2).value().type == TokenType::EQUALS;
+
+            auto mutable_ = peek(1).has_value() && peek(1).value().type == TokenType::MUTABLE && peek(2).has_value()
+                && peek(2).value().type == TokenType::IDENT && peek(3).has_value()
+                && peek(3).value().type == TokenType::EQUALS;
+
+            if (mutable_ || non_mutable) {
+                consume(); // consume let
+                if (mutable_) {
+                    consume(); // consume mut
+                }
+                Token ident = consume().value(); // consume token
+                consume(); // consume equals
+                if (auto node_expr = parse_expression()) {
+                    auto let_node = m_allocator->alloc<Node::Statement::Let>();
+                    let_node->identifier = ident;
+                    let_node->expression = node_expr.value();
+                    let_node->mutable_ = mutable_;
+                    op_let_node = let_node;
+                    // Node::Statement::Let{.identifier = ident, .expression = node_expr.value()};
+                }
+                else {
+                    std::cerr << "ya messed up bitches" << std::endl;
+                    exit(EXIT_FAILURE);
+                }
+                // consume semicolon
+                if (!peek().has_value() || peek().value().type != TokenType::SEMICL) {
+                    std::cerr << "ya messed up ya semicolon twat" << std::endl;
+                    exit(EXIT_FAILURE);
+                }
+                else {
+                    consume();
+                }
+            }
+        }
+
+        return op_let_node;
+    }
+
+    std::optional<Node::Statement::Assignment*> parse_assign()
+    {
+        std::optional<Node::Statement::Assignment*> op_assign_node = {};
+        if (peek().value().type == TokenType::IDENT && peek(1).has_value()
+            && peek(1).value().type == TokenType::EQUALS) {
             Token ident = consume().value();
             consume();
             if (auto node_expr = parse_expression()) {
-                auto let_node = m_allocator->alloc<Node::Statement::Let>();
+                auto let_node = m_allocator->alloc<Node::Statement::Assignment>();
                 let_node->identifier = ident;
                 let_node->expression = node_expr.value();
-                op_let_node = let_node;
-                // Node::Statement::Let{.identifier = ident, .expression = node_expr.value()};
+                op_assign_node = let_node;
             }
             else {
-                std::cerr << "ya messed up bitches" << std::endl;
+                std::cerr << "watchu trynna do n...." << std::endl;
                 exit(EXIT_FAILURE);
             }
             // consume semicolon
@@ -419,7 +476,7 @@ private:
             }
         }
 
-        return op_let_node;
+        return op_assign_node;
     }
 
     std::optional<Node::Scope*> parse_scope()
@@ -499,6 +556,11 @@ private:
         if (auto let_node = parse_let()) {
             auto node_statement = m_allocator->alloc<Node::Statement::Statement>();
             node_statement->statement = let_node.value();
+            return node_statement;
+        }
+        if (auto assign_node = parse_assign()) {
+            auto node_statement = m_allocator->alloc<Node::Statement::Statement>();
+            node_statement->statement = assign_node.value();
             return node_statement;
         }
         if (auto scope_node = parse_scope()) {

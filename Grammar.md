@@ -8,13 +8,19 @@ $$
         [\text{Scope}] \\
         \epsilon \\
     \end{cases} \\
+    [\text{Let}] &\to 
+    \begin{cases}
+        let\space\text{ident} = [\text{Expr}]; \\
+        let\space \text{mut}\space\text{ident} = [\text{Expr}]; \\
+    \end{cases} \\
     [\text{If}] &\to \text{if}\space[\text{Expr}][\text{Scope}]\space[Else] \\
     [\text{Stmt}] &\to 
     \begin{cases} 
     exit([\text{Expr}]); \\
-    let\space\text{ident} = [\text{Expr}]; \\
+    [\text{Let}] \\
     [\text{Scope}] \\
     [\text{If}] \\
+    \text{ident}=[\text{Expr}];
     \end{cases} \\
     [\text{Expr}] &\to 
     \begin{cases}

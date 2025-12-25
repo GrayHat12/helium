@@ -1,8 +1,9 @@
-let x = 0;
-if x {
-    exit(69);
-} else if x + 0 {
-    exit(42);
+let x = 70;
+if x - 70 {
+    exit(x);
+} else if x - 70 {
+    exit(x - 10);
 } else {
-    exit(96);
+    x = x - 1;
+    exit(x);
 }

@@ -1,74 +1,43 @@
 ```rs
-// let x = 1 + 2 * 3 + 1;
-// let y = x + 5;
-// exit(x);
+// let x = 0;
+// if x {
+//     exit(69);
+// } else {
+//     exit(42);
+// }
 
 Program{
     .stmts=[
         Statement{
             .statement=Let{
                 .identifier=Token{.type=5, .value=x}, 
-                .expression=Expression{
-                    .expression=Operation{
-                        .left=Expression{
-                            .expression=Operation{
-                                .left=Term{
-                                    .term=Term{
-                                        .expression=IntLiteral{.int_lit=Token{.type=2, .value=1}}
-                                    }
-                                }, 
-                                .operator=Token{.type=8, .value=+}, 
-                                .right=Expression{
-                                    .expression=Operation{
-                                        .left=Term{
-                                            .term=Term{
-                                                .expression=IntLiteral{.int_lit=Token{.type=2, .value=2}}
-                                            }
-                                        }, 
-                                        .operator=Token{.type=8, .value=*}, 
-                                        .right=Term{
-                                            .term=Term{
-                                                .expression=IntLiteral{.int_lit=Token{.type=2, .value=3}}
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }, 
-                        .operator=Token{.type=8, .value=+}, 
-                        .right=Term{
-                            .term=Term{
-                                .expression=IntLiteral{
-                                    .int_lit=Token{.type=2, .value=1}
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }, 
-        Statement{
-            .statement=Let{
-                .identifier=Token{.type=5, .value=y}, 
-                .expression=Expression{
-                    .expression=Operation{
-                        .left=Term{.term=Term{.expression=Identifier{.int_lit=Token{.type=5, .value=x}}}}, 
-                        .operator=Token{.type=8, .value=+}, 
-                        .right=Term{
-                            .term=Term{
-                                .expression=IntLiteral{.int_lit=Token{.type=2, .value=5}}
-                            }
-                        }
-                    }
-                }
-            }
-        }, 
-        Statement{
-            .statement=Exit{
                 .expression=Term{
                     .term=Term{
-                        .expression=Identifier{.int_lit=Token{.type=5, .value=x}}
+                        .expression=IntLiteral{.int_lit=Token{.type=2, .value=0}}
                     }
+                }
+            }
+        }, 
+        Statement{
+            .statement=If{
+                .expression=Term{.term=Term{.expression=Identifier{.int_lit=Token{.type=5, .value=x}}}},
+                .scope=[
+                    Statement{
+                        .statement=Exit{
+                            .expression=Term{
+                                .term=Term{.expression=IntLiteral{.int_lit=Token{.type=2, .value=69}}}
+                            }
+                        }
+                    }
+                ],
+                .else=Scope{
+                    .stmts=[
+                        Statement{
+                            .statement=Exit{
+                                .expression=Term{.term=Term{.expression=IntLiteral{.int_lit=Token{.type=2, .value=42}}}}
+                            }
+                        }
+                    ]
                 }
             }
         }

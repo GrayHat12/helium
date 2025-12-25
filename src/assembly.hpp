@@ -85,7 +85,7 @@ private:
                 generator.m_asmout << "    ; generate identifier" << "\n";
                 std::stringstream register_name;
                 // const auto &variable = (*it);
-                register_name << "QWORD [rsp + " << (generator.m_stack_counter - (*variable).stack_loc - 1) * 8 << "]";
+                register_name << "QWORD [rsp + " << (generator.m_stack_counter - variable->stack_loc - 1) * 8 << "]";
                 generator.stack_push(register_name.str());
             };
             void operator()(const Node::Expression::ParenthExpression* parenth_expression) const
@@ -210,8 +210,36 @@ private:
                 }
                 generator.m_asmout << "    ; generate variable" << "\n";
                 generator.m_variables.push_back(
-                    { .name = let_node->identifier.value.value(), .stack_loc = generator.m_stack_counter });
+                    {
+                        .name = let_node->identifier.value.value(),
+                        .mutable_ = let_node->mutable_,
+                        .stack_loc = generator.m_stack_counter,
+                    });
                 generator.generate_expression(let_node->expression);
+            };
+            void operator()(const Node::Statement::Assignment* assign_node) const
+            {
+                // std::cout << "Variable created" << " : " << let_node.identifier.value.value() << std::endl;
+
+                const auto variable
+                    = std::ranges::find_if(std::as_const(generator.m_variables), [&](const Variable& var) {
+                          return var.name == assign_node->identifier.value.value();
+                      });
+
+                if (variable == generator.m_variables.cend()) {
+                    std::cerr << "ya usin imaginary variables ya ugly piece of shit" << std::endl;
+                    exit(EXIT_FAILURE);
+                }
+
+                if (!variable->mutable_) {
+                    std::cerr << "ya messign with an immutable variable you dingus" << std::endl;
+                    exit(EXIT_FAILURE);
+                }
+                generator.m_asmout << "    ; reassign variable" << "\n";
+                generator.generate_expression(assign_node->expression);
+                generator.stack_pop("rax");
+                generator.m_asmout << "    mov [rsp + " << (generator.m_stack_counter - variable->stack_loc - 1) * 8
+                                   << "], rax" << "\n";
             };
             void operator()(const Node::Scope* scope_node) const
             {
@@ -245,6 +273,7 @@ private:
 
     struct Variable {
         std::string name;
+        bool mutable_;
         size_t stack_loc;
     };
 
@@ -252,7 +281,8 @@ private:
     {
         std::stringstream out;
         for (const Variable& variable : m_variables) {
-            out << "Variable name=" << variable.name << " value=" << variable.stack_loc << " | ";
+            out << "Variable name=" << variable.name << " value=" << variable.stack_loc
+                << " mutable=" << variable.mutable_ << " | ";
         }
         return out;
     }

@@ -1,12 +1,14 @@
 #pragma once
 
 #include <cassert>
+#include <utility>
+#include <ranges>
 #include "./parser.hpp"
 
 class AssGenerator
 {
 public:
-    inline AssGenerator(Node::Program prog, ArenaAllocator *allocator) : m_prog(std::move(prog)), m_allocator(allocator) {}
+    AssGenerator(Node::Program prog, ArenaAllocator *allocator) : m_prog(std::move(prog)), m_allocator(allocator) {}
 
     std::string generate_program()
     {
@@ -45,10 +47,10 @@ private:
 
     void end_scope()
     {
-        size_t pop_count = m_variables.size() - m_scopes.back();
+        const size_t pop_count = m_variables.size() - m_scopes.back();
         m_asmout << "    add rsp, " << pop_count * 8 << "\n";
         m_stack_counter -= pop_count;
-        for (int i = 0; i < pop_count; i++)
+        for (size_t i = 0; i < pop_count; i++)
         {
             m_variables.pop_back();
         }
@@ -71,13 +73,11 @@ private:
                 // std::cout << "Variable referenced" << " : " << identifier_node.ident.value.value() << std::endl;
                 // std::cout << "Existing variables " << generator->coutmap().str() << "\n";
                 // if (generator->m_variables.count(identifier_node->ident.value.value()) == 0)
-                const auto variable = std::find_if(
-                    generator.m_variables.cbegin(),
-                    generator.m_variables.cend(),
-                    [&](const Variable &variable)
-                    {
-                        return variable.name == identifier_node->ident.value.value();
-                    });
+                const auto variable = std::ranges::find_if(std::as_const(generator.m_variables),
+                                                           [&](const Variable &var)
+                                                           {
+                                                               return var.name == identifier_node->ident.value.value();
+                                                           });
                 if (variable == generator.m_variables.cend())
                 {
                     std::cerr << "ya using undeclared variables ya ass" << std::endl;
@@ -207,13 +207,11 @@ private:
             {
                 // std::cout << "Variable created" << " : " << let_node.identifier.value.value() << std::endl;
 
-                const auto variable = std::find_if(
-                    generator.m_variables.cbegin(),
-                    generator.m_variables.cend(),
-                    [&](const Variable &variable)
-                    {
-                        return variable.name == let_node->identifier.value.value();
-                    });
+                const auto variable = std::ranges::find_if(std::as_const(generator.m_variables),
+                                                           [&](const Variable &var)
+                                                           {
+                                                               return var.name == let_node->identifier.value.value();
+                                                           });
 
                 if (variable != generator.m_variables.cend())
                 {
@@ -250,10 +248,10 @@ private:
         size_t stack_loc;
     };
 
-    std::stringstream coutmap()
+    std::stringstream coutmap() const
     {
         std::stringstream out;
-        for (const Variable variable : m_variables)
+        for (const Variable &variable : m_variables)
         {
             out << "Variable name=" << variable.name << " value=" << variable.stack_loc << " | ";
         }

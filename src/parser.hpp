@@ -4,8 +4,6 @@
 #include <string>
 #include <vector>
 #include <optional>
-#include <variant>
-#include <algorithm>
 
 #include "./arena.hpp"
 #include "./tokenization.hpp"
@@ -26,7 +24,7 @@ namespace Node
         struct IntLiteral
         {
             Token int_lit;
-            std::stringstream to_string()
+            [[nodiscard]] std::stringstream to_string() const
             {
                 std::stringstream out;
                 out << "IntLiteral{.int_lit=" << int_lit.to_string().str() << "}";
@@ -36,7 +34,7 @@ namespace Node
         struct Identifier
         {
             Token ident;
-            std::stringstream to_string()
+            [[nodiscard]] std::stringstream to_string() const
             {
                 std::stringstream out;
                 out << "Identifier{.int_lit=" << ident.to_string().str() << "}";
@@ -61,12 +59,13 @@ namespace Node
         struct Expression
         {
             std::variant<Term *, Operation *> expression;
-            inline std::stringstream to_string() const
+
+            [[nodiscard]] std::stringstream to_string() const
             {
                 std::stringstream out;
                 if (std::holds_alternative<Operation *>(expression))
                 {
-                    Operation *operation = std::get<Operation *>(expression);
+                    auto operation = std::get<Operation *>(expression);
                     std::stringstream operationout;
                     operationout << "Operation{.left=" << operation->left_hand->to_string().str() << ", .operator=" << operation->oprator.to_string().str() << ", .right=" << operation->right_hand->to_string().str() << "}";
                     out << "Expression{.expression=" << operationout.str() << "}";
@@ -87,7 +86,7 @@ namespace Node
                     }
                     else if (std::holds_alternative<ParenthExpression *>(term->term))
                     {
-                        ParenthExpression *pexpression = std::get<ParenthExpression *>(term->term);
+                        // auto pexpression = std::get<ParenthExpression *>(term->term);
                         std::stringstream pexout;
                         pexout << "ParenthExpression{.expression=" << std::get<ParenthExpression *>(term->term)->expression->to_string().str() << "}";
                         termout << "Term{.expression=" << pexout.str() << "}";
@@ -98,7 +97,7 @@ namespace Node
             }
         };
 
-        std::stringstream term_to_string(Term *term)
+        inline std::stringstream term_to_string(const Term *term)
         {
             std::stringstream out;
             if (std::holds_alternative<IntLiteral *>(term->term))
@@ -111,7 +110,7 @@ namespace Node
             }
             else if (std::holds_alternative<ParenthExpression *>(term->term))
             {
-                ParenthExpression *pexpression = std::get<ParenthExpression *>(term->term);
+                // auto pexpression = std::get<ParenthExpression *>(term->term);
                 std::stringstream pexout;
                 pexout << "ParenthExpression{.expression=" << std::get<ParenthExpression *>(term->term)->expression->to_string().str() << "}";
                 out << "Term{.expression=" << pexout.str() << "}";
@@ -120,12 +119,12 @@ namespace Node
             return out;
         }
 
-        std::stringstream parenth_expression_to_string(ParenthExpression *expression)
+        inline std::stringstream parenth_expression_to_string(const ParenthExpression *expression)
         {
             return expression->expression->to_string();
         }
 
-        std::stringstream operation_to_string(Operation *operation)
+        inline std::stringstream operation_to_string(const Operation *operation)
         {
             std::stringstream out;
             out << "Operation{.left=" << operation->left_hand->to_string().str() << ", .operator=" << operation->oprator.to_string().str() << ", .right=" << operation->right_hand->to_string().str() << "}";
@@ -137,8 +136,7 @@ namespace Node
         struct Exit
         {
             Expression::Expression *expression;
-            std::stringstream to_string()
-            {
+            [[nodiscard]] std::stringstream to_string() const {
                 std::stringstream out;
                 out << "Exit{.expression=" << expression->to_string().str() << "}";
                 return out;
@@ -148,7 +146,7 @@ namespace Node
         {
             Token identifier;
             Expression::Expression *expression;
-            std::stringstream to_string()
+            [[nodiscard]] std::stringstream to_string() const
             {
                 std::stringstream out;
                 out << "Let{.identifier=" << identifier.to_string().str() << ", .expression=" << expression->to_string().str() << "}";
@@ -163,8 +161,7 @@ namespace Node
         struct Statement
         {
             std::variant<Exit *, Let *, Scope *, If *> statement;
-            std::stringstream to_string()
-            {
+            [[nodiscard]] std::stringstream to_string() const {
                 std::stringstream out;
                 if (std::holds_alternative<Exit *>(statement))
                 {
@@ -201,8 +198,7 @@ namespace Node
     struct Program
     {
         std::vector<Statement::Statement *> stmts;
-        std::stringstream to_string()
-        {
+        [[nodiscard]] std::stringstream to_string() const {
             std::stringstream out;
             out << "Program{.stmts=[";
             for (Statement::Statement *statmt : stmts)
@@ -215,9 +211,9 @@ namespace Node
     };
 }
 
-size_t expression_precedence(Node::Expression::Expression *expression)
+inline size_t expression_precedence(const Node::Expression::Expression *expression)
 {
-    if (auto term = std::get_if<Node::Expression::Term *>(&expression->expression))
+    if (const auto term = std::get_if<Node::Expression::Term *>(&expression->expression))
     {
         if (std::holds_alternative<Node::Expression::ParenthExpression *>((*term)->term))
         {
@@ -234,7 +230,7 @@ size_t expression_precedence(Node::Expression::Expression *expression)
 class Parser
 {
 public:
-    inline explicit Parser(const std::vector<Token> &tokens, ArenaAllocator *allocator) : m_tokens(std::move(tokens)), m_allocator(allocator)
+    explicit Parser(const std::vector<Token> &tokens, ArenaAllocator *allocator) : m_tokens(tokens), m_allocator(allocator)
     {
     }
 
@@ -499,42 +495,36 @@ private:
             node_statement->statement = exit_node.value();
             return node_statement;
         }
-        else if (auto let_node = parse_let())
+        if (auto let_node = parse_let())
         {
             auto node_statement = m_allocator->alloc<Node::Statement::Statement>();
             node_statement->statement = let_node.value();
             return node_statement;
         }
-        else if (auto scope_node = parse_scope())
+        if (auto scope_node = parse_scope())
         {
             auto scope_statement = m_allocator->alloc<Node::Statement::Statement>();
             scope_statement->statement = scope_node.value();
             return scope_statement;
         }
-        else if (auto if_node = parse_if())
+        if (auto if_node = parse_if())
         {
             auto if_statement = m_allocator->alloc<Node::Statement::Statement>();
             if_statement->statement = if_node.value();
             return if_statement;
         }
-        else
-        {
-            return {};
-            // std::cerr << "ya messed up wat ts shit" << std::endl;
-            // exit(EXIT_FAILURE);
-        }
+        return {};
+        // std::cerr << "ya messed up wat ts shit" << std::endl;
+        // exit(EXIT_FAILURE);
     }
 
-    [[nodiscard]] std::optional<Token> peek(int ahead = 0) const
+    [[nodiscard]] std::optional<Token> peek(const size_t ahead = 0) const
     {
         if (m_index + ahead >= m_tokens.size())
         {
             return {};
         }
-        else
-        {
-            return m_tokens.at(m_index + ahead);
-        }
+        return m_tokens.at(m_index + ahead);
     }
 
     std::optional<Token> consume()

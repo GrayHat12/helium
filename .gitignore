@@ -2,3 +2,5 @@ build/
 out
 *.asm
 *.o
+.idea/
+.vscode/

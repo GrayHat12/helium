@@ -22,7 +22,7 @@ std::string readFile(char *filepath)
     return contents;
 }
 
-void writeFile(std::string filepath, std::string *data)
+void writeFile(const std::string& filepath, const std::string *data)
 {
     std::fstream output(filepath, std::ios::out);
     output << data->c_str();
@@ -42,7 +42,7 @@ struct PathSplit
 
 File filename_split(const std::string &filename)
 {
-    std::size_t found = filename.find_last_of(".");
+    std::size_t found = filename.find_last_of('.');
     if (found == std::string::npos)
     {
         return {.name = filename};
@@ -66,7 +66,7 @@ PathSplit path_split(const std::string &fullpath)
     }
 }
 
-std::string generate_path(PathSplit &path)
+std::string generate_path(const PathSplit &path)
 {
     std::stringstream out;
     std::string spath = path.path;
@@ -79,7 +79,7 @@ std::string generate_path(PathSplit &path)
     {
         exten << "";
     }
-    if (spath.size() > 0)
+    if (!spath.empty())
     {
         spath.push_back('/');
     }
@@ -120,7 +120,7 @@ int main(int argc, char **argv)
 
     std::string asmcode = generator.generate_program();
 
-    // std::cout << prog_node.value().to_string().str() << std::endl;
+    std::cout << prog_node.value().to_string().str() << std::endl;
 
     // std::cout << asmcode.str() << std::endl;
 

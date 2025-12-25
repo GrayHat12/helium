@@ -2,12 +2,19 @@ $$
 \begin{align}
     [\text{Prog}] &\to [\text{Stmt}]^* \\
     [\text{Scope}] &\to [\{\text{Stmt}]^*\} \\
+    [\text{Else}] &\to 
+    \begin{cases}
+        [\text{If}] \\
+        [\text{Scope}] \\
+        \epsilon \\
+    \end{cases} \\
+    [\text{If}] &\to \text{if}\space[\text{Expr}][\text{Scope}]\space[Else] \\
     [\text{Stmt}] &\to 
     \begin{cases} 
     exit([\text{Expr}]); \\
     let\space\text{ident} = [\text{Expr}]; \\
-    \text{if}\space[\text{Expr}][\text{Scope}] \\
     [\text{Scope}] \\
+    [\text{If}] \\
     \end{cases} \\
     [\text{Expr}] &\to 
     \begin{cases}

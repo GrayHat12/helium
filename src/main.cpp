@@ -2,15 +2,15 @@
 #include <iostream>
 #include <optional>
 #include <sstream>
-#include <vector>
 #include <string>
+#include <vector>
 
-#include "./tokenization.hpp"
-#include "./parser.hpp"
-#include "./assembly.hpp"
 #include "./arena.hpp"
+#include "./assembly.hpp"
+#include "./parser.hpp"
+#include "./tokenization.hpp"
 
-std::string readFile(char *filepath)
+std::string readFile(char* filepath)
 {
     std::string contents;
     {
@@ -22,75 +22,65 @@ std::string readFile(char *filepath)
     return contents;
 }
 
-void writeFile(const std::string& filepath, const std::string *data)
+void writeFile(const std::string& filepath, const std::string* data)
 {
     std::fstream output(filepath, std::ios::out);
     output << data->c_str();
 }
 
-struct File
-{
+struct File {
     std::string name;
     std::optional<std::string> extn;
 };
 
-struct PathSplit
-{
+struct PathSplit {
     std::string path;
     File file;
 };
 
-File filename_split(const std::string &filename)
+File filename_split(const std::string& filename)
 {
     std::size_t found = filename.find_last_of('.');
-    if (found == std::string::npos)
-    {
-        return {.name = filename};
+    if (found == std::string::npos) {
+        return { .name = filename };
     }
-    else
-    {
-        return {.name = filename.substr(0, found), .extn = filename.substr(found + 1)};
+    else {
+        return { .name = filename.substr(0, found), .extn = filename.substr(found + 1) };
     }
 }
 
-PathSplit path_split(const std::string &fullpath)
+PathSplit path_split(const std::string& fullpath)
 {
     std::size_t found = fullpath.find_last_of("/\\");
-    if (found == std::string::npos)
-    {
-        return {.path = "", .file = filename_split(fullpath)};
+    if (found == std::string::npos) {
+        return { .path = "", .file = filename_split(fullpath) };
     }
-    else
-    {
-        return {.path = fullpath.substr(0, found), .file = filename_split(fullpath.substr(found + 1))};
+    else {
+        return { .path = fullpath.substr(0, found), .file = filename_split(fullpath.substr(found + 1)) };
     }
 }
 
-std::string generate_path(const PathSplit &path)
+std::string generate_path(const PathSplit& path)
 {
     std::stringstream out;
     std::string spath = path.path;
     std::stringstream exten;
-    if (path.file.extn.has_value())
-    {
+    if (path.file.extn.has_value()) {
         exten << "." << path.file.extn.value();
     }
-    else
-    {
+    else {
         exten << "";
     }
-    if (!spath.empty())
-    {
+    if (!spath.empty()) {
         spath.push_back('/');
     }
     out << spath << path.file.name << exten.str();
     return out.str();
 }
 
-int main(int argc, char **argv)
+int main(int argc, char** argv)
 {
-    if (argc < 3)
-    {
+    if (argc < 3) {
         std::cerr << "Incorrect Usage" << std::endl;
         std::cerr << "Usage: `helium <filepath.he> <outfile>`" << std::endl;
         return EXIT_FAILURE;
@@ -110,8 +100,7 @@ int main(int argc, char **argv)
 
     // std::cout << prog_node.value().to_string().str() << std::endl;
 
-    if (!prog_node.has_value())
-    {
+    if (!prog_node.has_value()) {
         std::cerr << "ya messed up ya twat" << std::endl;
         exit(EXIT_FAILURE);
     }

@@ -24,6 +24,7 @@ $$
     \begin{cases}
         \text{int-lit} \\
         \text{ident} \\
+        \text{([Expr])} \\
     \end{cases}
 \end{align}
 $$

@@ -60,6 +60,10 @@ private:
                 register_name << "QWORD [rsp + " << (generator->m_stack_counter - variable.stack_loc - 1) * 8 << "]";
                 generator->stack_push(register_name.str());
             };
+            void operator()(const Node::Expression::ParenthExpression *parenth_expression) const
+            {
+                generator->generate_expression(parenth_expression->expression);
+            };
             void operator()(const Node::Expression::IntLiteral *int_literal) const
             {
                 generator->m_asmout << "    ; generate literal" << "\n";

@@ -5,6 +5,7 @@
 #include <vector>
 #include <optional>
 #include <variant>
+#include <algorithm>
 
 #include "./arena.hpp"
 #include "./tokenization.hpp"
@@ -40,22 +41,13 @@ namespace Node
             Token oprator;
             Expression *right_hand;
         };
+        struct ParenthExpression
+        {
+            Expression *expression;
+        };
         struct Term
         {
-            std::variant<IntLiteral *, Identifier *> term;
-            std::stringstream to_string()
-            {
-                std::stringstream out;
-                if (std::holds_alternative<IntLiteral *>(term))
-                {
-                    out << "Term{.expression=" << std::get<IntLiteral *>(term)->to_string().str() << "}";
-                }
-                else if (std::holds_alternative<Identifier *>(term))
-                {
-                    out << "Term{.expression=" << std::get<Identifier *>(term)->to_string().str() << "}";
-                }
-                return out;
-            }
+            std::variant<IntLiteral *, Identifier *, ParenthExpression *> term;
         };
         struct Expression
         {
@@ -73,11 +65,56 @@ namespace Node
                 }
                 else if (std::holds_alternative<Term *>(expression))
                 {
-                    out << "Expression{.expression=" << std::get<Term *>(expression)->to_string().str() << "}";
+                    Term *term = std::get<Term *>(expression);
+                    std::stringstream termout;
+                    // out << "Expression{.expression=" << std::get<Term *>(expression)->to_string().str() << "}";
+                    if (std::holds_alternative<IntLiteral *>(term->term))
+                    {
+                        termout << "Term{.expression=" << std::get<IntLiteral *>(term->term)->to_string().str() << "}";
+                    }
+                    else if (std::holds_alternative<Identifier *>(term->term))
+                    {
+                        termout << "Term{.expression=" << std::get<Identifier *>(term->term)->to_string().str() << "}";
+                    }
+                    else if (std::holds_alternative<ParenthExpression *>(term->term))
+                    {
+                        ParenthExpression *pexpression = std::get<ParenthExpression *>(term->term);
+                        std::stringstream pexout;
+                        pexout << "ParenthExpression{.expression=" << std::get<ParenthExpression *>(term->term)->expression->to_string().str() << "}";
+                        termout << "Term{.expression=" << pexout.str() << "}";
+                    }
+                    out << "Term{.term=" << termout.str() << "}";
                 }
                 return out;
             }
         };
+
+        std::stringstream term_to_string(Term *term)
+        {
+            std::stringstream out;
+            if (std::holds_alternative<IntLiteral *>(term->term))
+            {
+                out << "Term{.expression=" << std::get<IntLiteral *>(term->term)->to_string().str() << "}";
+            }
+            else if (std::holds_alternative<Identifier *>(term->term))
+            {
+                out << "Term{.expression=" << std::get<Identifier *>(term->term)->to_string().str() << "}";
+            }
+            else if (std::holds_alternative<ParenthExpression *>(term->term))
+            {
+                ParenthExpression *pexpression = std::get<ParenthExpression *>(term->term);
+                std::stringstream pexout;
+                pexout << "ParenthExpression{.expression=" << std::get<ParenthExpression *>(term->term)->expression->to_string().str() << "}";
+                out << "Term{.expression=" << pexout.str() << "}";
+                // out << "Term{.expression=" << std::get<ParenthExpression *>(term->term)->to_string().str() << "}";
+            }
+            return out;
+        }
+
+        std::stringstream parenth_expression_to_string(ParenthExpression *expression)
+        {
+            return expression->expression->to_string();
+        }
 
         std::stringstream operation_to_string(Operation *operation)
         {
@@ -144,117 +181,20 @@ namespace Node
     };
 }
 
-Node::Expression::Operation *compute_precedence_tree(ArenaAllocator *allocator, const Node::Expression::Operation *operation)
+size_t expression_precedence(Node::Expression::Expression *expression)
 {
-    Node::Expression::Operation *balanced_operation = NULL;
-    if (auto lhs = std::get_if<Node::Expression::Operation *>(&operation->left_hand->expression))
+    if (auto term = std::get_if<Node::Expression::Term *>(&expression->expression))
     {
-        // std::cout << "got operation with lhs operation" << std::endl;
-
-        auto balanced_lhs = compute_precedence_tree(allocator, *lhs);
-
-        auto current_precedence = bin_precedence(operation->oprator).value();
-        auto leftop_precedence = bin_precedence(balanced_lhs->oprator).value();
-
-        if (leftop_precedence <= current_precedence)
+        if (std::holds_alternative<Node::Expression::ParenthExpression *>((*term)->term))
         {
-            // std::cout << "flipping tree lhs" << std::endl;
-            auto newrootop = allocator->alloc<Node::Expression::Operation>();
-            newrootop->left_hand = balanced_lhs->left_hand;
-            newrootop->oprator = balanced_lhs->oprator;
-            auto newright = allocator->alloc<Node::Expression::Operation>();
-            newright->left_hand = balanced_lhs->right_hand;
-            newright->oprator = operation->oprator;
-            newright->right_hand = operation->right_hand;
-            newrootop->right_hand = allocator->alloc<Node::Expression::Expression>();
-            newrootop->right_hand->expression = newright;
-            balanced_operation = newrootop;
-            // balanced_lhs->left_hand = balanced_lhs->right_hand;
-            // newrootop->right_hand->expression = balanced_lhs;
-
-            // operation->left_hand->expression = (*lhs)->right_hand->expression;
-            // (*lhs)->right_hand->expression = operation;
-            // operation = (*lhs);
+            return 1;
         }
-        else
-        {
-            if (balanced_operation == NULL)
-            {
-                balanced_operation = allocator->alloc<Node::Expression::Operation>();
-                balanced_operation->oprator = operation->oprator;
-            }
-            balanced_operation->left_hand = allocator->alloc<Node::Expression::Expression>();
-            balanced_operation->left_hand->expression = balanced_lhs;
-        }
+        return 0;
     }
     else
     {
-        if (balanced_operation == NULL)
-        {
-            balanced_operation = allocator->alloc<Node::Expression::Operation>();
-            balanced_operation->oprator = operation->oprator;
-        }
-        balanced_operation->left_hand = allocator->alloc<Node::Expression::Expression>();
-        balanced_operation->left_hand = operation->left_hand;
+        return 0;
     }
-    if (auto rhs = std::get_if<Node::Expression::Operation *>(&operation->right_hand->expression))
-    {
-        // std::cout << "got operation with rhs operation" << std::endl;
-        auto balanced_rhs = compute_precedence_tree(allocator, *rhs);
-
-        // std::cout << "balancedrhs=" << Node::Expression::operation_to_string(balanced_rhs).str() << std::endl;
-
-        auto current_precedence = bin_precedence(operation->oprator).value();
-        auto rightop_precedence = bin_precedence(balanced_rhs->oprator).value();
-        if (rightop_precedence <= current_precedence)
-        {
-            // std::cout << "flipping tree rhs" << std::endl;
-            auto newrootop = allocator->alloc<Node::Expression::Operation>();
-            newrootop->oprator = balanced_rhs->oprator;
-            newrootop->right_hand = balanced_rhs->right_hand;
-            auto newleft = allocator->alloc<Node::Expression::Operation>();
-            // newleft->left_hand = balanced_rhs->left_hand;
-            newleft->left_hand = balanced_operation->left_hand;
-            newleft->oprator = operation->oprator;
-            newleft->right_hand = balanced_rhs->left_hand;
-            // std::cout << "newleft=" << Node::Expression::operation_to_string(newleft).str() << std::endl;
-            newrootop->left_hand = allocator->alloc<Node::Expression::Expression>();
-            newrootop->left_hand->expression = newleft;
-            // std::cout << "newrootop=" << Node::Expression::operation_to_string(newrootop).str() << std::endl;
-            balanced_operation = newrootop;
-            // std::cout << "balanced_operation=" << Node::Expression::operation_to_string(balanced_operation).str() << std::endl;
-            // operation->right_hand->expression = (*rhs)->left_hand->expression;
-            // std::cout << "l1" << std::endl;
-            // (*rhs)->left_hand->expression = operation;
-            // std::cout << "l2" << std::endl;
-            // operation = (*rhs);
-            // std::cout << "l3" << std::endl;
-        }
-        else
-        {
-            // std::cout << "not flipping tree rhs" << std::endl;
-            if (balanced_operation == NULL)
-            {
-                assert(false); // should never happen
-            }
-            balanced_operation->right_hand = allocator->alloc<Node::Expression::Expression>();
-            balanced_operation->right_hand->expression = balanced_rhs;
-        }
-        // std::cout << "l4" << std::endl;
-    }
-    else
-    {
-        if (balanced_operation == NULL)
-        {
-            // balanced_operation = allocator->alloc<Node::Expression::Operation>();
-            // balanced_operation->oprator = operation->oprator;
-            assert(false); // should never happen
-        }
-        balanced_operation->right_hand = allocator->alloc<Node::Expression::Expression>();
-        balanced_operation->right_hand = operation->right_hand;
-    }
-    // std::cout << "Returning " << Node::Expression::operation_to_string(balanced_operation).str() << std::endl;
-    return balanced_operation;
 }
 
 class Parser
@@ -302,55 +242,82 @@ private:
             node_expression->term = node_expression_identifier;
             return node_expression;
         }
+        else if (peek().has_value() && peek().value().type == TokenType::OPEN_PAREN)
+        {
+            consume();
+            auto expr = parse_expression();
+            if (!expr.has_value())
+            {
+                std::cerr << "whers ya expression ya dimwit" << std::endl;
+                exit(EXIT_FAILURE);
+            }
+            if (peek().has_value() && peek().value().type == TokenType::CLOSE_PAREN)
+            {
+                consume();
+            }
+            else
+            {
+                std::cerr << "ya waitin n ya daddy to add the close parenthesis ya dong" << std::endl;
+                exit(EXIT_FAILURE);
+            }
+            auto term_paren = m_allocator->alloc<Node::Expression::ParenthExpression>();
+            term_paren->expression = expr.value();
+            auto term = m_allocator->alloc<Node::Expression::Term>();
+            term->term = term_paren;
+            return term;
+        }
         else
         {
             return {};
         }
     }
-    std::optional<Node::Expression::Expression *> parse_expression(bool compute_precedence = true)
+    std::optional<Node::Expression::Expression *> parse_expression(size_t min_prec = 0)
     {
-        if (auto term = parse_term())
-        {
-            auto node_expression = m_allocator->alloc<Node::Expression::Expression>();
-            if (peek().has_value() && peek().value().type == TokenType::OPERATOR)
-            {
-                auto left_hand = m_allocator->alloc<Node::Expression::Expression>();
-                left_hand->expression = term.value();
-                auto operation_expression = m_allocator->alloc<Node::Expression::Operation>();
-                auto oprator = consume();
-                if (auto rhs = parse_expression(false))
-                {
-                    operation_expression->left_hand = left_hand;
-                    operation_expression->oprator = oprator.value();
-                    operation_expression->right_hand = rhs.value();
-
-                    if (compute_precedence)
-                    {
-                        // std::cout << "Before reorder " << Node::Expression::operation_to_string(operation_expression).str() << std::endl;
-                        node_expression->expression = compute_precedence_tree(m_allocator, operation_expression);
-                        // std::cout << "After reorder " << node_expression->to_string().str() << std::endl;
-                    }
-                    else
-                    {
-                        node_expression->expression = operation_expression;
-                    }
-                }
-                else
-                {
-                    std::cerr << "did ya lose some nuts ya weeb" << std::endl;
-                    exit(EXIT_FAILURE);
-                }
-            }
-            else
-            {
-                node_expression->expression = term.value();
-            }
-            return node_expression;
-        }
-        else
+        std::optional<Node::Expression::Term *> term_lhs = parse_term();
+        // std::cout << "Entering with min_prec=" << min_prec << std::endl;
+        if (!term_lhs.has_value())
         {
             return {};
         }
+
+        auto expr_lhs = m_allocator->alloc<Node::Expression::Expression>();
+        expr_lhs->expression = term_lhs.value();
+
+        while (true)
+        {
+            auto cur_tok = peek();
+            if (!cur_tok.has_value())
+            {
+                break;
+            }
+            auto precedence = bin_precedence(cur_tok.value());
+            if (!precedence.has_value() || precedence < min_prec)
+            {
+                break;
+            }
+            Token op = consume().value();
+            auto next_min_prec = precedence.value() + 1;
+            auto expr_rhs = parse_expression(next_min_prec);
+
+            if (!expr_rhs.has_value())
+            {
+                std::cerr << "wers da rigt and expression ya neandrathal" << std::endl;
+                exit(EXIT_FAILURE);
+            }
+
+            auto expr = m_allocator->alloc<Node::Expression::Expression>();
+            auto operation = m_allocator->alloc<Node::Expression::Operation>();
+
+            operation->oprator = op;
+            operation->left_hand = expr_lhs;
+            operation->right_hand = expr_rhs.value();
+
+            expr->expression = operation;
+
+            expr_lhs = expr;
+        };
+
+        return expr_lhs;
     }
 
     std::optional<Node::Statement::Exit *> parse_exit()

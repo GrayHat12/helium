@@ -108,6 +108,8 @@ int main(int argc, char **argv)
 
     std::optional<Node::Program> prog_node = parser.parse();
 
+    // std::cout << prog_node.value().to_string().str() << std::endl;
+
     if (!prog_node.has_value())
     {
         std::cerr << "ya messed up ya twat" << std::endl;

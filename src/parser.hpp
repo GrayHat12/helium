@@ -10,14 +10,25 @@
 
 namespace Node {
 
+struct BaseNode {
+    std::pair<size_t, size_t> position;
+
+    [[nodiscard]] std::stringstream current_position(std::string prefix = "error at ") const
+    {
+        std::stringstream out;
+        out << prefix << position.first << ":" << position.second;
+        return out;
+    }
+};
+
 namespace Statement {
 struct Statement;
 }
-struct Scope {
+struct Scope : BaseNode {
     std::vector<Statement::Statement*> stmts;
 };
 namespace Expression {
-struct IntLiteral {
+struct IntLiteral : BaseNode {
     Token int_lit;
     [[nodiscard]] std::stringstream to_string() const
     {
@@ -26,7 +37,7 @@ struct IntLiteral {
         return out;
     }
 };
-struct Identifier {
+struct Identifier : BaseNode {
     Token ident;
     [[nodiscard]] std::stringstream to_string() const
     {
@@ -36,18 +47,18 @@ struct Identifier {
     }
 };
 struct Expression;
-struct Operation {
+struct Operation : BaseNode {
     Expression* left_hand;
     Token oprator;
     Expression* right_hand;
 };
-struct ParenthExpression {
+struct ParenthExpression : BaseNode {
     Expression* expression;
 };
-struct Term {
+struct Term : BaseNode {
     std::variant<IntLiteral*, Identifier*, ParenthExpression*> term;
 };
-struct Expression {
+struct Expression : BaseNode {
     std::variant<Term*, Operation*> expression;
 
     [[nodiscard]] std::stringstream to_string() const
@@ -119,7 +130,7 @@ inline std::stringstream operation_to_string(const Operation* operation)
 }
 };
 namespace Statement {
-struct Exit {
+struct Exit : BaseNode {
     Expression::Expression* expression;
     [[nodiscard]] std::stringstream to_string() const
     {
@@ -128,7 +139,7 @@ struct Exit {
         return out;
     }
 };
-struct Let {
+struct Let : BaseNode {
     Token identifier;
     Expression::Expression* expression;
     bool mutable_;
@@ -140,7 +151,7 @@ struct Let {
         return out;
     }
 };
-struct Assignment {
+struct Assignment : BaseNode {
     Token identifier;
     Expression::Expression* expression;
     [[nodiscard]] std::stringstream to_string() const
@@ -152,16 +163,16 @@ struct Assignment {
     }
 };
 struct Else;
-struct If {
+struct If : BaseNode {
     Node::Expression::Expression* expression;
     Node::Scope* scope;
     std::optional<Else*> else_;
 };
 
-struct Else {
+struct Else : BaseNode {
     std::variant<If*, Scope*> else_;
 };
-struct Statement {
+struct Statement : BaseNode {
     std::variant<Exit*, Let*, Scope*, If*, Assignment*> statement;
 
     [[nodiscard]] std::stringstream to_string(If* ifnode) const
@@ -227,7 +238,7 @@ struct Statement {
     }
 };
 };
-struct Program {
+struct Program : BaseNode {
     std::vector<Statement::Statement*> stmts;
     [[nodiscard]] std::stringstream to_string() const
     {
@@ -272,7 +283,7 @@ public:
                 program_node.stmts.push_back(statement.value());
             }
             else {
-                std::cerr << "wat di statement ya twat" << std::endl;
+                std::cerr << "wat di statement ya twat" << current_position().str() << std::endl;
                 exit(EXIT_FAILURE);
             }
         }
@@ -285,35 +296,42 @@ private:
         if (peek().has_value() && peek().value().type == TokenType::INT_LT) {
             auto node_expression_int_lit = m_allocator->alloc<Node::Expression::IntLiteral>();
             node_expression_int_lit->int_lit = consume().value();
+            node_expression_int_lit->position = node_expression_int_lit->position;
             auto node_expression = m_allocator->alloc<Node::Expression::Term>();
             node_expression->term = node_expression_int_lit;
+            node_expression->position = node_expression_int_lit->position;
             return node_expression;
         }
         else if (peek().has_value() && peek().value().type == TokenType::IDENT) {
             auto node_expression_identifier = m_allocator->alloc<Node::Expression::Identifier>();
             node_expression_identifier->ident = consume().value();
+            node_expression_identifier->position = node_expression_identifier->position;
             auto node_expression = m_allocator->alloc<Node::Expression::Term>();
             node_expression->term = node_expression_identifier;
+            node_expression->position = node_expression_identifier->position;
             return node_expression;
         }
         else if (peek().has_value() && peek().value().type == TokenType::OPEN_PAREN) {
             consume();
             auto expr = parse_expression();
             if (!expr.has_value()) {
-                std::cerr << "whers ya expression ya dimwit" << std::endl;
+                std::cerr << "whers ya expression ya dimwit " << current_position().str() << std::endl;
                 exit(EXIT_FAILURE);
             }
             if (peek().has_value() && peek().value().type == TokenType::CLOSE_PAREN) {
                 consume();
             }
             else {
-                std::cerr << "ya waitin n ya daddy to add the close parenthesis ya dong" << std::endl;
+                std::cerr << "ya waitin n ya daddy to add the close parenthesis ya dong " << current_position().str()
+                          << std::endl;
                 exit(EXIT_FAILURE);
             }
             auto term_paren = m_allocator->alloc<Node::Expression::ParenthExpression>();
             term_paren->expression = expr.value();
+            term_paren->position = term_paren->expression->position;
             auto term = m_allocator->alloc<Node::Expression::Term>();
             term->term = term_paren;
+            term->position = term_paren->position;
             return term;
         }
         else {
@@ -330,6 +348,7 @@ private:
 
         auto expr_lhs = m_allocator->alloc<Node::Expression::Expression>();
         expr_lhs->expression = term_lhs.value();
+        expr_lhs->position = term_lhs.value()->position;
 
         while (true) {
             auto cur_tok = peek();
@@ -345,7 +364,7 @@ private:
             auto expr_rhs = parse_expression(next_min_prec);
 
             if (!expr_rhs.has_value()) {
-                std::cerr << "wers da rigt and expression ya neandrathal" << std::endl;
+                std::cerr << "wers da rigt and expression ya neandrathal " << current_position().str() << std::endl;
                 exit(EXIT_FAILURE);
             }
 
@@ -355,8 +374,10 @@ private:
             operation->oprator = op;
             operation->left_hand = expr_lhs;
             operation->right_hand = expr_rhs.value();
+            operation->position = expr_lhs->position;
 
             expr->expression = operation;
+            expr->position = operation->position;
 
             expr_lhs = expr;
         };
@@ -370,21 +391,22 @@ private:
         // std::cout << peek().value().type << " : " << peek().value().value.value_or("") << std::endl;
         if (peek().value().type == TokenType::EXIT && peek(1).has_value()
             && peek(1).value().type == TokenType::OPEN_PAREN) {
-            consume();
+            auto exittoken = consume();
             consume();
             if (auto node_expr = parse_expression()) {
                 // exit_node = Node::Statement::Exit{.expression = node_expr.value()};
                 auto exit_node = m_allocator->alloc<Node::Statement::Exit>();
                 exit_node->expression = node_expr.value();
                 op_exit_node = exit_node;
+                exit_node->position = exittoken.value().position;
             }
             else {
-                std::cerr << "ya messed up bitches" << std::endl;
+                std::cerr << "ya messed up bitches " << current_position().str() << std::endl;
                 exit(EXIT_FAILURE);
             }
             // consume close paren
             if (!peek().has_value() || peek().value().type != TokenType::CLOSE_PAREN) {
-                std::cerr << "ya messed up ya parenthesis twat" << std::endl;
+                std::cerr << "ya messed up ya parenthesis twat " << current_position().str() << std::endl;
                 exit(EXIT_FAILURE);
             }
             else {
@@ -393,7 +415,7 @@ private:
 
             // consume semicolon
             if (!peek().has_value() || peek().value().type != TokenType::SEMICL) {
-                std::cerr << "ya messed up ya semicolon twat" << std::endl;
+                std::cerr << "ya messed up ya semicolon twat " << current_position().str() << std::endl;
                 exit(EXIT_FAILURE);
             }
             else {
@@ -417,7 +439,7 @@ private:
                 && peek(3).value().type == TokenType::EQUALS;
 
             if (mutable_ || non_mutable) {
-                consume(); // consume let
+                auto lettoken = consume().value(); // consume let
                 if (mutable_) {
                     consume(); // consume mut
                 }
@@ -428,16 +450,17 @@ private:
                     let_node->identifier = ident;
                     let_node->expression = node_expr.value();
                     let_node->mutable_ = mutable_;
+                    let_node->position = lettoken.position;
                     op_let_node = let_node;
                     // Node::Statement::Let{.identifier = ident, .expression = node_expr.value()};
                 }
                 else {
-                    std::cerr << "ya messed up bitches" << std::endl;
+                    std::cerr << "ya messed up bitches " << current_position().str() << std::endl;
                     exit(EXIT_FAILURE);
                 }
                 // consume semicolon
                 if (!peek().has_value() || peek().value().type != TokenType::SEMICL) {
-                    std::cerr << "ya messed up ya semicolon twat" << std::endl;
+                    std::cerr << "ya messed up ya semicolon twat " << current_position().str() << std::endl;
                     exit(EXIT_FAILURE);
                 }
                 else {
@@ -457,18 +480,19 @@ private:
             Token ident = consume().value();
             consume();
             if (auto node_expr = parse_expression()) {
-                auto let_node = m_allocator->alloc<Node::Statement::Assignment>();
-                let_node->identifier = ident;
-                let_node->expression = node_expr.value();
-                op_assign_node = let_node;
+                auto assign_node = m_allocator->alloc<Node::Statement::Assignment>();
+                assign_node->identifier = ident;
+                assign_node->expression = node_expr.value();
+                assign_node->position = ident.position;
+                op_assign_node = assign_node;
             }
             else {
-                std::cerr << "watchu trynna do n...." << std::endl;
+                std::cerr << "watchu trynna do n...." << current_position().str() << std::endl;
                 exit(EXIT_FAILURE);
             }
             // consume semicolon
             if (!peek().has_value() || peek().value().type != TokenType::SEMICL) {
-                std::cerr << "ya messed up ya semicolon twat" << std::endl;
+                std::cerr << "ya messed up ya semicolon twat " << current_position().str() << std::endl;
                 exit(EXIT_FAILURE);
             }
             else {
@@ -482,8 +506,9 @@ private:
     std::optional<Node::Scope*> parse_scope()
     {
         if (peek().has_value() && peek().value().type == TokenType::OPEN_CURLY) {
-            consume();
+            auto curlytoken = consume();
             auto scope = m_allocator->alloc<Node::Scope>();
+            scope->position = curlytoken.value().position;
             while (auto statement = parse_statement()) {
                 scope->stmts.push_back(statement.value());
             }
@@ -491,7 +516,7 @@ private:
                 consume();
             }
             else {
-                std::cerr << "ya need em iq pointz to close ya scopes mf" << std::endl;
+                std::cerr << "ya need em iq pointz to close ya scopes mf " << current_position().str() << std::endl;
                 exit(EXIT_FAILURE);
             }
             return scope;
@@ -502,8 +527,9 @@ private:
     std::optional<Node::Statement::Else*> parse_else()
     {
         if (peek().has_value() && peek().value().type == TokenType::ELSE) {
-            consume();
+            auto elsetoken = consume().value();
             auto else_statement = m_allocator->alloc<Node::Statement::Else>();
+            else_statement->position = elsetoken.position;
             auto ifnode = parse_if();
             if (ifnode.has_value()) {
                 else_statement->else_ = ifnode.value();
@@ -511,7 +537,8 @@ private:
             else {
                 auto scope = parse_scope();
                 if (!scope.has_value()) {
-                    std::cerr << "if then wat mf. say it, type it. don't fuck it up" << std::endl;
+                    std::cerr << "if then wat mf. say it, type it. don't fuck it up " << current_position().str()
+                              << std::endl;
                     exit(EXIT_FAILURE);
                 }
                 else_statement->else_ = scope.value();
@@ -525,18 +552,20 @@ private:
     {
         if (peek().has_value() && peek().value().type == TokenType::IF) {
             // std::cout << "checking if " << peek().value().to_string().str() << std::endl;
-            consume();
+            auto iftoken = consume().value();
             auto expression = parse_expression();
             if (!expression.has_value()) {
-                std::cerr << "if what mf! if what ? be clear" << std::endl;
+                std::cerr << "if what mf! if what ? be clear" << current_position().str() << std::endl;
                 exit(EXIT_FAILURE);
             }
             auto scope = parse_scope();
             if (!scope.has_value()) {
-                std::cerr << "if then wat mf. say it, type it. don't fuck it up" << std::endl;
+                std::cerr << "if then wat mf. say it, type it. don't fuck it up" << current_position().str()
+                          << std::endl;
                 exit(EXIT_FAILURE);
             }
             auto if_statement = m_allocator->alloc<Node::Statement::If>();
+            if_statement->position = iftoken.position;
             if_statement->expression = expression.value();
             if_statement->scope = scope.value();
             auto else_statement = parse_else();
@@ -551,26 +580,31 @@ private:
         if (auto exit_node = parse_exit()) {
             auto node_statement = m_allocator->alloc<Node::Statement::Statement>();
             node_statement->statement = exit_node.value();
+            node_statement->position = exit_node.value()->position;
             return node_statement;
         }
         if (auto let_node = parse_let()) {
             auto node_statement = m_allocator->alloc<Node::Statement::Statement>();
             node_statement->statement = let_node.value();
+            node_statement->position = let_node.value()->position;
             return node_statement;
         }
         if (auto assign_node = parse_assign()) {
             auto node_statement = m_allocator->alloc<Node::Statement::Statement>();
             node_statement->statement = assign_node.value();
+            node_statement->position = assign_node.value()->position;
             return node_statement;
         }
         if (auto scope_node = parse_scope()) {
             auto scope_statement = m_allocator->alloc<Node::Statement::Statement>();
             scope_statement->statement = scope_node.value();
+            scope_statement->position = scope_node.value()->position;
             return scope_statement;
         }
         if (auto if_node = parse_if()) {
             auto if_statement = m_allocator->alloc<Node::Statement::Statement>();
             if_statement->statement = if_node.value();
+            if_statement->position = if_node.value()->position;
             return if_statement;
         }
         return {};
@@ -591,9 +625,20 @@ private:
         if (m_index >= m_tokens.size()) {
             return {};
         }
-        return m_tokens.at(m_index++);
+        auto token = m_tokens.at(m_index++);
+        m_position = token.position;
+        return token;
     }
     const std::vector<Token> m_tokens;
     size_t m_index = 0;
     ArenaAllocator* m_allocator;
+
+    std::pair<size_t, size_t> m_position = { 0, 0 };
+
+    std::stringstream current_position(std::string prefix = "error at ")
+    {
+        std::stringstream out;
+        out << prefix << m_position.first << ":" << m_position.second;
+        return out;
+    }
 };

@@ -54,6 +54,7 @@ std::ostream& operator<<(std::enable_if_t<std::is_enum_v<T>, std::ostream>& stre
 struct Token {
     TokenType type;
     std::optional<std::string> value;
+    std::pair<size_t, size_t> position;
     [[nodiscard]] std::stringstream to_string() const
     {
         std::stringstream out;
@@ -93,36 +94,36 @@ public:
                     buffer.push_back(consume().value());
                 }
                 if (buffer == "exit") {
-                    tokens.push_back({ .type = TokenType::EXIT });
+                    tokens.push_back({ .type = TokenType::EXIT, .position = { m_lineno, m_colno } });
                     // std::cout << "Got Exit " << buffer << std::endl;
                     buffer.clear();
                     continue;
                 }
                 if (buffer == "let") {
-                    tokens.push_back({ .type = TokenType::LET });
+                    tokens.push_back({ .type = TokenType::LET, .position = { m_lineno, m_colno } });
                     // std::cout << "Got Exit " << buffer << std::endl;
                     buffer.clear();
                     continue;
                 }
                 if (buffer == "mut") {
-                    tokens.push_back({ .type = TokenType::MUTABLE });
+                    tokens.push_back({ .type = TokenType::MUTABLE, .position = { m_lineno, m_colno } });
                     // std::cout << "Got Exit " << buffer << std::endl;
                     buffer.clear();
                     continue;
                 }
                 if (buffer == "if") {
-                    tokens.push_back({ .type = TokenType::IF });
+                    tokens.push_back({ .type = TokenType::IF, .position = { m_lineno, m_colno } });
                     // std::cout << "Got Exit " << buffer << std::endl;
                     buffer.clear();
                     continue;
                 }
                 if (buffer == "else") {
-                    tokens.push_back({ .type = TokenType::ELSE });
+                    tokens.push_back({ .type = TokenType::ELSE, .position = { m_lineno, m_colno } });
                     // std::cout << "Got Exit " << buffer << std::endl;
                     buffer.clear();
                     continue;
                 }
-                tokens.push_back({ .type = TokenType::IDENT, .value = buffer });
+                tokens.push_back({ .type = TokenType::IDENT, .value = buffer, .position = { m_lineno, m_colno } });
                 buffer.clear();
                 continue;
                 // std::cerr << "ya messed up bitches" << std::endl;
@@ -156,7 +157,7 @@ public:
                             if (isComment) {
                                 consume();
                                 if (!peek().has_value()) {
-                                    std::cerr << "close ya comment ya bitch" << std::endl;
+                                    std::cerr << "close ya comment ya bitch " << current_position().str() << std::endl;
                                     exit(EXIT_FAILURE);
                                 }
                             }
@@ -179,52 +180,57 @@ public:
                 while (peek().has_value() && std::isdigit(peek().value())) {
                     buffer.push_back(consume().value());
                 }
-                tokens.push_back({ .type = TokenType::INT_LT, .value = buffer });
+                tokens.push_back({ .type = TokenType::INT_LT, .value = buffer, .position = { m_lineno, m_colno } });
                 // std::cout << "Got INT_LT " << buffer << std::endl;
                 buffer.clear();
                 continue;
             }
             if (peek().value() == '(') {
                 consume();
-                tokens.push_back({ .type = TokenType::OPEN_PAREN });
+                tokens.push_back({ .type = TokenType::OPEN_PAREN, .position = { m_lineno, m_colno } });
                 continue;
             }
             if (peek().value() == ')') {
                 consume();
-                tokens.push_back({ .type = TokenType::CLOSE_PAREN });
+                tokens.push_back({ .type = TokenType::CLOSE_PAREN, .position = { m_lineno, m_colno } });
                 continue;
             }
             if (peek().value() == '{') {
                 consume();
-                tokens.push_back({ .type = TokenType::OPEN_CURLY });
+                tokens.push_back({ .type = TokenType::OPEN_CURLY, .position = { m_lineno, m_colno } });
                 continue;
             }
             if (peek().value() == '}') {
                 consume();
-                tokens.push_back({ .type = TokenType::CLOSE_CURLY });
+                tokens.push_back({ .type = TokenType::CLOSE_CURLY, .position = { m_lineno, m_colno } });
                 continue;
             }
             if (peek().value() == '=') {
                 consume();
                 // std::cout << "Got SEMICL " << buffer << std::endl;
-                tokens.push_back({ .type = TokenType::EQUALS });
+                tokens.push_back({ .type = TokenType::EQUALS, .position = { m_lineno, m_colno } });
                 continue;
             }
             if (std::ranges::find(Operators, peek().value()) != Operators.end()) {
-                tokens.push_back({ .type = TokenType::OPERATOR, .value = std::string { consume().value() } });
+                tokens.push_back(
+                    {
+                        .type = TokenType::OPERATOR,
+                        .value = std::string { consume().value() },
+                        .position = { m_lineno, m_colno },
+                    });
                 continue;
             }
             if (peek().value() == ';') {
                 consume();
                 // std::cout << "Got SEMICL " << buffer << std::endl;
-                tokens.push_back({ .type = TokenType::SEMICL });
+                tokens.push_back({ .type = TokenType::SEMICL, .position = { m_lineno, m_colno } });
                 continue;
             }
             if (std::isspace(peek().value())) {
                 consume();
                 continue;
             }
-            std::cerr << "ye or me messed up ya savagez" << std::endl;
+            std::cerr << "ye or me messed up ya savagez" << current_position().str() << std::endl;
             exit(EXIT_FAILURE);
         }
         return tokens;
@@ -239,14 +245,31 @@ private:
         return m_src.at(m_index + ahead);
     }
 
+    std::stringstream current_position(std::string prefix = "error at ")
+    {
+        std::stringstream out;
+        out << prefix << m_lineno << ":" << m_colno;
+        return out;
+    }
+
     std::optional<char> consume()
     {
         if (m_index >= m_src.length()) {
             return {};
         }
-        return m_src.at(m_index++);
+        auto c = m_src.at(m_index++);
+        if (c == '\n') {
+            m_lineno += 1;
+            m_colno = 1;
+        }
+        else {
+            m_colno += 1;
+        }
+        return c;
     }
 
     const std::string m_src;
     size_t m_index = 0;
+    size_t m_lineno = 1;
+    size_t m_colno = 1;
 };

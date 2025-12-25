@@ -79,7 +79,8 @@ private:
                           return var.name == identifier_node->ident.value.value();
                       });
                 if (variable == generator.m_variables.cend()) {
-                    std::cerr << "ya using undeclared variables ya ass" << std::endl;
+                    std::cerr << "ya using undeclared variables ya ass" << identifier_node->current_position().str()
+                              << std::endl;
                     exit(EXIT_FAILURE);
                 }
                 generator.m_asmout << "    ; generate identifier" << "\n";
@@ -205,7 +206,7 @@ private:
                       });
 
                 if (variable != generator.m_variables.cend()) {
-                    std::cerr << "ya reusin variables ya bitch" << std::endl;
+                    std::cerr << "ya reusin variables ya bitch" << let_node->current_position().str() << std::endl;
                     exit(EXIT_FAILURE);
                 }
                 generator.m_asmout << "    ; generate variable" << "\n";
@@ -227,12 +228,14 @@ private:
                       });
 
                 if (variable == generator.m_variables.cend()) {
-                    std::cerr << "ya usin imaginary variables ya ugly piece of shit" << std::endl;
+                    std::cerr << "ya usin imaginary variables ya ugly piece of shit"
+                              << assign_node->current_position().str() << std::endl;
                     exit(EXIT_FAILURE);
                 }
 
                 if (!variable->mutable_) {
-                    std::cerr << "ya messign with an immutable variable you dingus" << std::endl;
+                    std::cerr << "ya messign with an immutable variable you dingus"
+                              << assign_node->current_position().str() << std::endl;
                     exit(EXIT_FAILURE);
                 }
                 generator.m_asmout << "    ; reassign variable" << "\n";

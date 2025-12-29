@@ -542,8 +542,17 @@ private:
             };
             void operator()(const Node::Statement::If* if_node) const
             {
+                Node::VariableType type = generator.infer_type(if_node->expression);
                 generator.generate_expression(if_node->expression);
-                generator.stack_pop("rax");
+                if (type == Node::VariableType::STR) {
+                    // Stack has: [Length, Pointer]
+                    generator.stack_pop("rax"); // Pop the pointer (we don't need it for truthiness)
+                    generator.stack_pop("rax"); // Pop the length into RAX
+                }
+                else {
+                    // Stack has: [Integer]
+                    generator.stack_pop("rax");
+                }
                 auto elselabel = generator.create_label();
                 auto skiplabel = generator.create_label();
                 generator.m_asmout << "    test rax, rax" << "\n";

@@ -1,9 +1,11 @@
-let x = 70;
-if x - 70 {
-    exit(x);
-} else if x - 70 {
-    exit(x - 10);
-} else {
-    x = x - 1;
-    exit(x);
+let mut x = 1;
+let mut y = "hello";
+
+if y {
+    y = "hello world";
+    x = 2;
 }
+
+print(67 + x + "\t" + y + "\n");
+
+exit(x + 67);

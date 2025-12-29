@@ -23,6 +23,9 @@ enum class TokenType {
     IF,
     ELSE,
     MUTABLE,
+    PRINT,
+    STR_LIT,
+    DINV_COMMA,
 };
 
 const std::vector<std::pair<std::string, std::string>> Comments = {
@@ -111,6 +114,12 @@ public:
                     buffer.clear();
                     continue;
                 }
+                if (buffer == "print") {
+                    tokens.push_back({ .type = TokenType::PRINT, .position = { m_lineno, m_colno } });
+                    // std::cout << "Got Exit " << buffer << std::endl;
+                    buffer.clear();
+                    continue;
+                }
                 if (buffer == "if") {
                     tokens.push_back({ .type = TokenType::IF, .position = { m_lineno, m_colno } });
                     // std::cout << "Got Exit " << buffer << std::endl;
@@ -157,8 +166,9 @@ public:
                             if (isComment) {
                                 consume();
                                 if (!peek().has_value()) {
-                                    std::cerr << "close ya comment ya bitch " << current_position().str() << std::endl;
-                                    exit(EXIT_FAILURE);
+                                    // std::cerr << "close ya comment ya bitch " << current_position().str() <<
+                                    // std::endl; exit(EXIT_FAILURE);
+                                    break;
                                 }
                             }
                             else {
@@ -203,6 +213,29 @@ public:
             if (peek().value() == '}') {
                 consume();
                 tokens.push_back({ .type = TokenType::CLOSE_CURLY, .position = { m_lineno, m_colno } });
+                continue;
+            }
+            if (peek().value() == '"') {
+                // std::cout << "inside string" << std::endl;
+                auto prevChar = consume();
+                tokens.push_back({ .type = TokenType::DINV_COMMA, .position = { m_lineno, m_colno } });
+                while (peek().has_value()) {
+                    auto currChar = consume().value();
+                    if (currChar == '"' && prevChar == '\\') {
+                        buffer.push_back(currChar);
+                    }
+                    else if (currChar == '"') {
+                        break;
+                    }
+                    else {
+                        buffer.push_back(currChar);
+                        prevChar = currChar;
+                    }
+                }
+                tokens.push_back({ .type = TokenType::STR_LIT, .value = buffer, .position = { m_lineno, m_colno } });
+                // std::cout << "consumed string " << buffer << " peek=" << peek().value_or('-') << std::endl;
+                buffer.clear();
+                tokens.push_back({ .type = TokenType::DINV_COMMA, .position = { m_lineno, m_colno } });
                 continue;
             }
             if (peek().value() == '=') {

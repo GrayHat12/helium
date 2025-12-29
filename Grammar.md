@@ -17,6 +17,7 @@ $$
     [\text{Stmt}] &\to 
     \begin{cases} 
         exit([\text{Expr}]); \\
+        print([\text{Expr}]); \\
         [\text{Let}] \\
         [\text{Scope}] \\
         [\text{If}] \\
@@ -39,6 +40,7 @@ $$
     [\text{Term}] &\to
     \begin{cases}
         \text{int-lit} \\
+        \text{"str-lit"} \\
         \text{ident} \\
         \text{([Expr])} \\
     \end{cases}

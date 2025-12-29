@@ -10,6 +10,8 @@
 
 namespace Node {
 
+enum class VariableType { NUM, STR };
+
 struct BaseNode {
     std::pair<size_t, size_t> position;
 
@@ -37,6 +39,15 @@ struct IntLiteral : BaseNode {
         return out;
     }
 };
+struct StrLiteral : BaseNode {
+    Token str_lit;
+    [[nodiscard]] std::stringstream to_string() const
+    {
+        std::stringstream out;
+        out << "StrLiteral{.str_lit=\"" << str_lit.to_string().str() << "\"}";
+        return out;
+    }
+};
 struct Identifier : BaseNode {
     Token ident;
     [[nodiscard]] std::stringstream to_string() const
@@ -56,7 +67,7 @@ struct ParenthExpression : BaseNode {
     Expression* expression;
 };
 struct Term : BaseNode {
-    std::variant<IntLiteral*, Identifier*, ParenthExpression*> term;
+    std::variant<IntLiteral*, StrLiteral*, Identifier*, ParenthExpression*> term;
 };
 struct Expression : BaseNode {
     std::variant<Term*, Operation*> expression;
@@ -79,6 +90,9 @@ struct Expression : BaseNode {
             // out << "Expression{.expression=" << std::get<Term *>(expression)->to_string().str() << "}";
             if (std::holds_alternative<IntLiteral*>(term->term)) {
                 termout << "Term{.expression=" << std::get<IntLiteral*>(term->term)->to_string().str() << "}";
+            }
+            else if (std::holds_alternative<StrLiteral*>(term->term)) {
+                termout << "Term{.expression=" << std::get<StrLiteral*>(term->term)->to_string().str() << "}";
             }
             else if (std::holds_alternative<Identifier*>(term->term)) {
                 termout << "Term{.expression=" << std::get<Identifier*>(term->term)->to_string().str() << "}";
@@ -113,6 +127,9 @@ inline std::stringstream term_to_string(const Term* term)
         out << "Term{.expression=" << pexout.str() << "}";
         // out << "Term{.expression=" << std::get<ParenthExpression *>(term->term)->to_string().str() << "}";
     }
+    else if (std::holds_alternative<StrLiteral*>(term->term)) {
+        out << "Term{.expression=\"" << std::get<StrLiteral*>(term->term)->to_string().str() << "\"}";
+    }
     return out;
 }
 
@@ -139,10 +156,20 @@ struct Exit : BaseNode {
         return out;
     }
 };
+struct Print : BaseNode {
+    Expression::Expression* expression;
+    [[nodiscard]] std::stringstream to_string() const
+    {
+        std::stringstream out;
+        out << "Print{.expression=" << expression->to_string().str() << "}";
+        return out;
+    }
+};
 struct Let : BaseNode {
     Token identifier;
     Expression::Expression* expression;
     bool mutable_;
+    std::optional<Node::VariableType> variableType;
     [[nodiscard]] std::stringstream to_string() const
     {
         std::stringstream out;
@@ -173,7 +200,7 @@ struct Else : BaseNode {
     std::variant<If*, Scope*> else_;
 };
 struct Statement : BaseNode {
-    std::variant<Exit*, Let*, Scope*, If*, Assignment*> statement;
+    std::variant<Exit*, Print*, Let*, Scope*, If*, Assignment*> statement;
 
     [[nodiscard]] std::stringstream to_string(If* ifnode) const
     {
@@ -215,6 +242,9 @@ struct Statement : BaseNode {
         std::stringstream out;
         if (std::holds_alternative<Exit*>(statement)) {
             out << "Statement{.statement=" << std::get<Exit*>(statement)->to_string().str() << "}";
+        }
+        else if (std::holds_alternative<Print*>(statement)) {
+            out << "Statement{.statement=" << std::get<Print*>(statement)->to_string().str() << "}";
         }
         else if (std::holds_alternative<Let*>(statement)) {
             out << "Statement{.statement=" << std::get<Let*>(statement)->to_string().str() << "}";
@@ -334,6 +364,20 @@ private:
             term->position = term_paren->position;
             return term;
         }
+        else if (
+            peek().has_value() && peek().value().type == TokenType::DINV_COMMA && peek(1).has_value()
+            && peek(1).value().type == TokenType::STR_LIT && peek(2).has_value()
+            && peek(2).value().type == TokenType::DINV_COMMA) {
+            consume();
+            auto node_expression_str_lit = m_allocator->alloc<Node::Expression::StrLiteral>();
+            node_expression_str_lit->str_lit = consume().value();
+            node_expression_str_lit->position = node_expression_str_lit->position;
+            auto node_expression = m_allocator->alloc<Node::Expression::Term>();
+            node_expression->term = node_expression_str_lit;
+            node_expression->position = node_expression_str_lit->position;
+            consume();
+            return node_expression;
+        }
         else {
             return {};
         }
@@ -424,6 +468,45 @@ private:
         }
 
         return op_exit_node;
+    }
+
+    std::optional<Node::Statement::Print*> parse_print()
+    {
+        std::optional<Node::Statement::Print*> op_print_node;
+        if (peek().value().type == TokenType::PRINT && peek(1).has_value()
+            && peek(1).value().type == TokenType::OPEN_PAREN) {
+            auto exittoken = consume();
+            consume();
+            if (auto node_expr = parse_expression()) {
+                auto print_node = m_allocator->alloc<Node::Statement::Print>();
+                print_node->expression = node_expr.value();
+                op_print_node = print_node;
+                print_node->position = exittoken.value().position;
+            }
+            else {
+                std::cerr << "ya messed up bitches " << current_position().str() << std::endl;
+                exit(EXIT_FAILURE);
+            }
+            // consume close paren
+            if (!peek().has_value() || peek().value().type != TokenType::CLOSE_PAREN) {
+                std::cerr << "ya messed up ya parenthesis twat " << current_position().str() << std::endl;
+                exit(EXIT_FAILURE);
+            }
+            else {
+                consume();
+            }
+
+            // consume semicolon
+            if (!peek().has_value() || peek().value().type != TokenType::SEMICL) {
+                std::cerr << "ya messed up ya semicolon twat " << current_position().str() << std::endl;
+                exit(EXIT_FAILURE);
+            }
+            else {
+                consume();
+            }
+        }
+
+        return op_print_node;
     }
 
     std::optional<Node::Statement::Let*> parse_let()
@@ -581,6 +664,12 @@ private:
             auto node_statement = m_allocator->alloc<Node::Statement::Statement>();
             node_statement->statement = exit_node.value();
             node_statement->position = exit_node.value()->position;
+            return node_statement;
+        }
+        if (auto print_node = parse_print()) {
+            auto node_statement = m_allocator->alloc<Node::Statement::Statement>();
+            node_statement->statement = print_node.value();
+            node_statement->position = print_node.value()->position;
             return node_statement;
         }
         if (auto let_node = parse_let()) {

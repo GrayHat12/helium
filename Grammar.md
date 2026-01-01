@@ -21,7 +21,8 @@ $$
         [\text{Let}] \\
         [\text{Scope}] \\
         [\text{If}] \\
-        \text{ident}=[\text{Expr}];
+        \text{ident}=[\text{Expr}]; \\
+        \text{while}\space[\text{Expr}]\space[\text{Scope}] \\
     \end{cases} \\
     [\text{Expr}] &\to 
     \begin{cases}

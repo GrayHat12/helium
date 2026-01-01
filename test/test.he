@@ -1,11 +1,8 @@
-let mut x = 1;
-let mut y = "hello";
+let mut x = 100;
 
-if y {
-    y = "hello world";
-    x = 2;
+while x-69 {
+    x = x - 1;
+    print("" + x + "\n");
 }
 
-print(67 + x + "\t" + y + "\n");
-
-exit(x + 67);
+exit(x - 69);

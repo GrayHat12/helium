@@ -199,8 +199,13 @@ struct If : BaseNode {
 struct Else : BaseNode {
     std::variant<If*, Scope*> else_;
 };
+
+struct While : BaseNode {
+    Node::Expression::Expression* expression;
+    Node::Scope* scope;
+};
 struct Statement : BaseNode {
-    std::variant<Exit*, Print*, Let*, Scope*, If*, Assignment*> statement;
+    std::variant<Exit*, Print*, Let*, Scope*, If*, Assignment*, While*> statement;
 
     [[nodiscard]] std::stringstream to_string(If* ifnode) const
     {
@@ -223,6 +228,14 @@ struct Statement : BaseNode {
             }
         }
         out << "}";
+        return out;
+    }
+
+    [[nodiscard]] std::stringstream to_string(While* whilenode) const
+    {
+        std::stringstream out;
+        out << "While{.expression=" << whilenode->expression->to_string().str() << ",.scope=[";
+        out << to_string(whilenode->scope).str() << "]}";
         return out;
     }
 
@@ -263,6 +276,10 @@ struct Statement : BaseNode {
         else if (std::holds_alternative<If*>(statement)) {
             auto ifnode = std::get<If*>(statement);
             out << "Statement{.statement=" << to_string(ifnode).str() << "}";
+        }
+        else if (std::holds_alternative<While*>(statement)) {
+            auto whilenode = std::get<While*>(statement);
+            out << "Statement{.statement=" << to_string(whilenode).str() << "}";
         }
         return out;
     }
@@ -658,6 +675,30 @@ private:
         return {};
     }
 
+    std::optional<Node::Statement::While*> parse_while()
+    {
+        if (peek().has_value() && peek().value().type == TokenType::WHILE) {
+            auto whiletoken = consume().value();
+            auto expression = parse_expression();
+            if (!expression.has_value()) {
+                std::cerr << "while what mf! while what ? be clear" << current_position().str() << std::endl;
+                exit(EXIT_FAILURE);
+            }
+            auto scope = parse_scope();
+            if (!scope.has_value()) {
+                std::cerr << "while then wat mf. say it, type it. don't fuck it up" << current_position().str()
+                          << std::endl;
+                exit(EXIT_FAILURE);
+            }
+            auto while_statement = m_allocator->alloc<Node::Statement::While>();
+            while_statement->position = whiletoken.position;
+            while_statement->expression = expression.value();
+            while_statement->scope = scope.value();
+            return while_statement;
+        }
+        return {};
+    }
+
     std::optional<Node::Statement::Statement*> parse_statement()
     {
         if (auto exit_node = parse_exit()) {
@@ -695,6 +736,12 @@ private:
             if_statement->statement = if_node.value();
             if_statement->position = if_node.value()->position;
             return if_statement;
+        }
+        if (auto while_node = parse_while()) {
+            auto while_statement = m_allocator->alloc<Node::Statement::Statement>();
+            while_statement->statement = while_node.value();
+            while_statement->position = while_node.value()->position;
+            return while_statement;
         }
         return {};
         // std::cerr << "ya messed up wat ts shit" << std::endl;

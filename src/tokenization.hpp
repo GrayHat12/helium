@@ -26,6 +26,7 @@ enum class TokenType {
     PRINT,
     STR_LIT,
     DINV_COMMA,
+    WHILE,
 };
 
 const std::vector<std::pair<std::string, std::string>> Comments = {
@@ -102,33 +103,39 @@ public:
                     buffer.clear();
                     continue;
                 }
+                if (buffer == "while") {
+                    tokens.push_back({ .type = TokenType::WHILE, .position = { m_lineno, m_colno } });
+                    // std::cout << "Got while " << buffer << std::endl;
+                    buffer.clear();
+                    continue;
+                }
                 if (buffer == "let") {
                     tokens.push_back({ .type = TokenType::LET, .position = { m_lineno, m_colno } });
-                    // std::cout << "Got Exit " << buffer << std::endl;
+                    // std::cout << "Got let " << buffer << std::endl;
                     buffer.clear();
                     continue;
                 }
                 if (buffer == "mut") {
                     tokens.push_back({ .type = TokenType::MUTABLE, .position = { m_lineno, m_colno } });
-                    // std::cout << "Got Exit " << buffer << std::endl;
+                    // std::cout << "Got mut " << buffer << std::endl;
                     buffer.clear();
                     continue;
                 }
                 if (buffer == "print") {
                     tokens.push_back({ .type = TokenType::PRINT, .position = { m_lineno, m_colno } });
-                    // std::cout << "Got Exit " << buffer << std::endl;
+                    // std::cout << "Got print " << buffer << std::endl;
                     buffer.clear();
                     continue;
                 }
                 if (buffer == "if") {
                     tokens.push_back({ .type = TokenType::IF, .position = { m_lineno, m_colno } });
-                    // std::cout << "Got Exit " << buffer << std::endl;
+                    // std::cout << "Got if " << buffer << std::endl;
                     buffer.clear();
                     continue;
                 }
                 if (buffer == "else") {
                     tokens.push_back({ .type = TokenType::ELSE, .position = { m_lineno, m_colno } });
-                    // std::cout << "Got Exit " << buffer << std::endl;
+                    // std::cout << "Got else " << buffer << std::endl;
                     buffer.clear();
                     continue;
                 }

@@ -585,6 +585,32 @@ private:
                 generator.m_asmout << skiplabel << ":" << "\n";
                 generator.m_asmout << "    ; outside if-elif chain" << "\n";
             };
+            void operator()(const Node::Statement::While* while_node) const
+            {
+                Node::VariableType type = generator.infer_type(while_node->expression);
+                auto conditionlabel = generator.create_label();
+                generator.m_asmout << conditionlabel << ":" << "\n";
+                generator.generate_expression(while_node->expression);
+                if (type == Node::VariableType::STR) {
+                    // Stack has: [Length, Pointer]
+                    generator.stack_pop("rax"); // Pop the pointer (we don't need it for truthiness)
+                    generator.stack_pop("rax"); // Pop the length into RAX
+                }
+                else {
+                    // Stack has: [Integer]
+                    generator.stack_pop("rax");
+                }
+                auto skiplabel = generator.create_label();
+                generator.m_asmout << "    test rax, rax" << "\n";
+                generator.m_asmout << "    ; jump to skip" << "\n";
+                generator.m_asmout << "    jz " << skiplabel << "\n";
+                generator.m_asmout << "    ; inside while" << "\n";
+                generator.generate_scope(while_node->scope);
+                generator.m_asmout << "    jmp " << conditionlabel << "\n";
+
+                generator.m_asmout << skiplabel << ":" << "\n";
+                generator.m_asmout << "    ; outside while loop" << "\n";
+            };
         };
 
         StatementVisitor visitor = { .generator = *this };

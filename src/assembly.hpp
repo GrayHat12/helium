@@ -225,20 +225,37 @@ private:
                     exit(EXIT_FAILURE);
                 }
                 generator.m_asmout << "    ; generate identifier" << "\n";
-                if (variable->type == Node::VariableType::STR) {
-                    size_t len_offset = (generator.m_stack_counter - variable->stack_loc - 1) * 8;
-                    generator.m_asmout << "    mov rax, QWORD [rsp + " << len_offset << "]\n";
-                    generator.stack_push("rax");
 
-                    size_t ptr_offset = (generator.m_stack_counter - (variable->stack_loc + 1) - 1) * 8;
-                    generator.m_asmout << "    mov rax, QWORD [rsp + " << ptr_offset << "]\n";
-                    generator.stack_push("rax");
+                if (variable->is_argument) {
+                    if (variable->type == Node::VariableType::STR) {
+
+                        generator.m_asmout << "    mov rax, QWORD [rbp + " << variable->arg_offset + 8 << "]\n";
+                        generator.stack_push("rax");
+
+                        generator.m_asmout << "    mov rax, QWORD [rbp + " << variable->arg_offset << "]\n";
+                        generator.stack_push("rax");
+                    }
+                    else {
+                        generator.m_asmout << "    mov rax, QWORD [rbp + " << variable->arg_offset << "]\n";
+                        generator.stack_push("rax");
+                    }
                 }
                 else {
-                    std::stringstream register_name;
-                    register_name << "QWORD [rsp + " << (generator.m_stack_counter - variable->stack_loc - 1) * 8
-                                  << "]";
-                    generator.stack_push(register_name.str());
+                    if (variable->type == Node::VariableType::STR) {
+                        size_t len_offset = (generator.m_stack_counter - variable->stack_loc - 1) * 8;
+                        generator.m_asmout << "    mov rax, QWORD [rsp + " << len_offset << "]\n";
+                        generator.stack_push("rax");
+
+                        size_t ptr_offset = (generator.m_stack_counter - (variable->stack_loc + 1) - 1) * 8;
+                        generator.m_asmout << "    mov rax, QWORD [rsp + " << ptr_offset << "]\n";
+                        generator.stack_push("rax");
+                    }
+                    else {
+                        std::stringstream register_name;
+                        register_name << "QWORD [rsp + " << (generator.m_stack_counter - variable->stack_loc - 1) * 8
+                                      << "]";
+                        generator.stack_push(register_name.str());
+                    }
                 }
             };
             void operator()(const Node::Expression::ParenthExpression* parenth_expression) const
@@ -276,6 +293,60 @@ private:
                 generator.m_asmout << "    lea rax, [" << label << "] ; string pointer\n";
                 generator.stack_push("rax");
             };
+            void operator()(const Node::Expression::FunctionCall* fncall) const
+            {
+                const std::string& func_name = fncall->ident.value.value();
+
+                // Look up the function in our metadata
+                auto it = std::ranges::find_if(generator.m_functions, [&](const Function& f) {
+                    return f.name == func_name;
+                });
+
+                if (it == generator.m_functions.end()) {
+                    std::cerr << "Calling undefined function: " << func_name << std::endl;
+                    exit(EXIT_FAILURE);
+                }
+
+                const auto& func_meta = *it;
+
+                if (fncall->arguments.size() != func_meta.argument_types.size()) {
+                    std::cerr << "invalid argument length for function call biatch " << func_name
+                              << fncall->current_position(" at ").str() << std::endl;
+                    exit(EXIT_FAILURE);
+                }
+
+                // 1. Push Arguments in reverse (Right-to-Left)
+                size_t bytes_pushed = 0;
+                for (int i = fncall->arguments.size() - 1; i >= 0; i--) {
+                    auto expected_type = func_meta.argument_types.at(i);
+                    auto injected_type = generator.infer_type(fncall->arguments[i]);
+                    if (expected_type != injected_type) {
+                        std::cerr << "invalid argument types for function call biatch " << func_name
+                                  << fncall->arguments[i]->current_position(" at ").str() << std::endl;
+                        exit(EXIT_FAILURE);
+                    }
+                    generator.generate_expression(fncall->arguments[i]);
+                    bytes_pushed += (injected_type == Node::VariableType::STR) ? 16 : 8;
+                }
+
+                // 2. Call
+                generator.m_asmout << "    call _" << func_name << "\n";
+
+                // 3. Stack Cleanup
+                if (bytes_pushed > 0) {
+                    generator.m_asmout << "    add rsp, " << bytes_pushed << "\n";
+                    generator.m_stack_counter -= (bytes_pushed / 8);
+                }
+
+                // 4. Handle Return Value
+                if (func_meta.return_type == Node::VariableType::STR) {
+                    generator.stack_push("rdx"); // Length
+                    generator.stack_push("rax"); // Pointer
+                }
+                else {
+                    generator.stack_push("rax");
+                }
+            };
         };
 
         TermVisitor visitor = { .generator = *this };
@@ -310,6 +381,10 @@ private:
             if (std::holds_alternative<Node::Expression::StrLiteral*>(term->term)) {
                 return Node::VariableType::STR;
             }
+            if (std::holds_alternative<Node::Expression::FunctionCall*>(term->term)) {
+                return get_function_return_type(
+                    std::get<Node::Expression::FunctionCall*>(term->term)->ident.value.value());
+            }
             if (auto* ident_ptr = std::get_if<Node::Expression::Identifier*>(&term->term)) {
                 // Look up existing variable type
                 auto var = std::ranges::find_if(m_variables, [&](const Variable& v) {
@@ -322,6 +397,14 @@ private:
             }
         }
         assert(false && "Should never happen");
+    }
+
+    Node::VariableType get_function_return_type(const std::string& name)
+    {
+        const auto function = std::ranges::find_if(std::as_const(m_functions), [&](const Function& function) {
+            return function.name == name;
+        });
+        return function->return_type;
     }
 
     void generate_expression(const Node::Expression::Expression* expression)
@@ -519,21 +602,40 @@ private:
                 }
                 generator.m_asmout << "    ; reassign variable" << "\n";
                 generator.generate_expression(assign_node->expression);
-                if (variable->type == Node::VariableType::STR) {
-                    // Pop the new fat pointer (ptr, then len)
-                    generator.stack_pop("rax"); // new ptr
-                    generator.stack_pop("rbx"); // new len
+                if (variable->is_argument) {
+                    if (variable->type == Node::VariableType::STR) {
+                        generator.stack_pop("rax"); // new ptr
+                        generator.stack_pop("rbx"); // new len
 
-                    generator.m_asmout << "    mov [rsp + " << (generator.m_stack_counter - variable->stack_loc - 1) * 8
-                                       << "], rbx" << "\n";
-                    generator.m_asmout << "    mov [rsp + "
-                                       << (generator.m_stack_counter - (variable->stack_loc + 1) - 1) * 8 << "], rax"
-                                       << "\n";
+                        // Write to RBP based offsets
+                        generator.m_asmout << "    mov [rbp + " << variable->arg_offset + 8 << "], rbx\n"; // len
+                        generator.m_asmout << "    mov [rbp + " << variable->arg_offset << "], rax\n"; // ptr
+                    }
+                    else {
+                        generator.stack_pop("rax");
+                        generator.m_asmout << "    mov [rbp + " << variable->arg_offset << "], rax\n";
+                    }
                 }
                 else {
-                    generator.stack_pop("rax");
-                    generator.m_asmout << "    mov [rsp + " << (generator.m_stack_counter - variable->stack_loc - 1) * 8
-                                       << "], rax" << "\n";
+                    if (variable->type == Node::VariableType::STR) {
+                        // Pop the new fat pointer (ptr, then len)
+                        generator.stack_pop("rax"); // new ptr
+                        generator.stack_pop("rbx"); // new len
+
+                        generator.m_asmout
+                            << "    mov [rsp + " << (generator.m_stack_counter - variable->stack_loc - 1) * 8
+                            << "], rbx" << "\n";
+                        generator.m_asmout
+                            << "    mov [rsp + " << (generator.m_stack_counter - (variable->stack_loc + 1) - 1) * 8
+                            << "], rax"
+                            << "\n";
+                    }
+                    else {
+                        generator.stack_pop("rax");
+                        generator.m_asmout
+                            << "    mov [rsp + " << (generator.m_stack_counter - variable->stack_loc - 1) * 8
+                            << "], rax" << "\n";
+                    }
                 }
             };
             void operator()(const Node::Scope* scope_node) const
@@ -611,6 +713,90 @@ private:
                 generator.m_asmout << skiplabel << ":" << "\n";
                 generator.m_asmout << "    ; outside while loop" << "\n";
             };
+            void operator()(const Node::Statement::Function* fnnode) const
+            {
+                Function func;
+                func.name = fnnode->identifier.value.value();
+                func.return_type = fnnode->returnType;
+                for (const auto& arg : fnnode->arguments) {
+                    func.argument_types.push_back(arg->datatype);
+                }
+                generator.m_functions.push_back(func);
+
+                auto funcendlabel = generator.create_label();
+                generator.m_asmout << "    ; jump to funcend" << "\n";
+                generator.m_asmout << "    jmp " << funcendlabel << "\n";
+
+                // 2. Generate Label and Prologue
+                std::string func_label = "_" + func.name;
+                generator.m_asmout << "\n" << func_label << ":\n";
+                generator.m_asmout << "    push rbp\n";
+                generator.m_asmout << "    mov rbp, rsp\n";
+
+                // Save State & Reset for new Scope
+                size_t old_stack_counter = generator.m_stack_counter;
+                generator.m_stack_counter = 0; // Local variables start fresh relative to new RSP
+
+                generator.begin_scope();
+
+                // 4. Register Arguments
+                // The stack structure on entry (after push rbp):
+                // [rbp]      = Old RBP
+                // [rbp + 8]  = Return Address
+                // [rbp + 16] = Last Argument Pushed
+
+                // We need to calculate offsets based on reverse order if we push args left-to-right,
+                // or standard order if right-to-left. Assuming Standard C-like (RTL push):
+                // But your parser/generator stack machine likely evaluates args then pushes them.
+
+                int current_arg_offset = 16;
+                for (const auto& arg : fnnode->arguments) {
+                    generator.m_variables.push_back(
+                        { .name = arg->identifier.value.value(),
+                          .mutable_ = true,
+                          .stack_loc = 0, // Not used for arguments
+                          .type = arg->datatype,
+                          .is_argument = true,
+                          .arg_offset = current_arg_offset });
+                    current_arg_offset += (arg->datatype == Node::VariableType::STR) ? 16 : 8;
+                }
+
+                // 5. Generate Body
+                for (const Node::Statement::Statement* stmt : fnnode->scope->stmts) {
+                    generator.generate_statement(stmt);
+                }
+
+                // 6. Function Epilogue (Implicit return if user didn't write one)
+                generator.end_scope(); // Remove args/locals from compiler tracking
+
+                generator.m_asmout << "    mov rsp, rbp\n";
+                generator.m_asmout << "    pop rbp\n";
+                generator.m_asmout << "    ret\n";
+
+                // 7. Restore State
+                generator.m_stack_counter = old_stack_counter;
+
+                generator.m_asmout << funcendlabel << ":" << "\n";
+                generator.m_asmout << "    ; outside function" << "\n";
+            };
+            void operator()(const Node::Statement::Return* return_node) const
+            {
+                Node::VariableType type = generator.infer_type(return_node->expression);
+                generator.generate_expression(return_node->expression);
+
+                if (type == Node::VariableType::STR) {
+                    generator.stack_pop("rax"); // Pointer
+                    generator.stack_pop("rdx"); // Length
+                }
+                else {
+                    generator.stack_pop("rax");
+                }
+
+                // Clean up stack and return
+                generator.m_asmout << "    mov rsp, rbp\n";
+                generator.m_asmout << "    pop rbp\n";
+                generator.m_asmout << "    ret\n";
+            };
         };
 
         StatementVisitor visitor = { .generator = *this };
@@ -622,6 +808,14 @@ private:
         bool mutable_;
         size_t stack_loc;
         Node::VariableType type;
+
+        bool is_argument = false;
+        int arg_offset = 0;
+    };
+    struct Function {
+        std::string name;
+        Node::VariableType return_type;
+        std::vector<Node::VariableType> argument_types;
     };
     struct StringConstant {
         std::string label;
@@ -642,6 +836,7 @@ private:
     std::stringstream m_asmout;
     size_t m_stack_counter = 0;
     std::vector<Variable> m_variables {};
+    std::vector<Function> m_functions {};
     std::vector<StringConstant> m_strings {};
     std::vector<size_t> m_scopes {};
     ArenaAllocator* m_allocator;

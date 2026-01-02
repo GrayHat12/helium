@@ -276,6 +276,10 @@ private:
                 generator.m_asmout << "    lea rax, [" << label << "] ; string pointer\n";
                 generator.stack_push("rax");
             };
+            void operator()(const Node::Expression::FunctionCall* func_call) const
+            {
+                assert(false && "not implemented");
+            };
         };
 
         TermVisitor visitor = { .generator = *this };
@@ -610,6 +614,14 @@ private:
 
                 generator.m_asmout << skiplabel << ":" << "\n";
                 generator.m_asmout << "    ; outside while loop" << "\n";
+            };
+            void operator()(const Node::Statement::Function* function_definition) const
+            {
+                assert(false && "not implemented");
+            };
+            void operator()(const Node::Statement::Return* return_stmt) const
+            {
+                assert(false && "not implemented");
             };
         };
 

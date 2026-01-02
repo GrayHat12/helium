@@ -21,8 +21,10 @@ $$
         [\text{Let}] \\
         [\text{Scope}] \\
         [\text{If}] \\
+        [\text{Function}] \\
         \text{ident}=[\text{Expr}]; \\
         \text{while}\space[\text{Expr}]\space[\text{Scope}] \\
+        \text{return}\space[\text{Expr}]; \\
     \end{cases} \\
     [\text{Expr}] &\to 
     \begin{cases}
@@ -30,6 +32,12 @@ $$
         [\text{Operation}] \\
     \end{cases} \\
     [\text{Operation}] &\to [\text{Expr}]\space[\text{Operator}]\space[\text{Expr}] \\
+    [\text{Function}] &\to \text{fn}\space\text{ident}([\text{Argument}],...)[\text{DataType}][\text{Scope}] \\
+    [\text{Argument}] &\to \text{ident}\space[\text{DataType}] \\
+    [\text{DataType}] &\to \begin{cases}
+        \text{num} \\
+        \text{str}
+    \end{cases} \\
     [\text{Operator}] &\to 
     \begin{cases}
         \text{+} & \text{prec}=0 \\
@@ -44,6 +52,7 @@ $$
         \text{"str-lit"} \\
         \text{ident} \\
         \text{([Expr])} \\
+        \text{ident([\text{Expr},...])} \\
     \end{cases}
 \end{align}
 $$

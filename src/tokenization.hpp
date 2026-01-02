@@ -27,6 +27,10 @@ enum class TokenType {
     STR_LIT,
     DINV_COMMA,
     WHILE,
+    DATATYPE,
+    FUNCTION,
+    COMMA,
+    RETURN,
 };
 
 const std::vector<std::pair<std::string, std::string>> Comments = {
@@ -100,6 +104,32 @@ public:
                 if (buffer == "exit") {
                     tokens.push_back({ .type = TokenType::EXIT, .position = { m_lineno, m_colno } });
                     // std::cout << "Got Exit " << buffer << std::endl;
+                    buffer.clear();
+                    continue;
+                }
+                if (buffer == "num") {
+                    tokens.push_back(
+                        { .type = TokenType::DATATYPE, .value = buffer, .position = { m_lineno, m_colno } });
+                    // std::cout << "Got num datatype " << buffer << std::endl;
+                    buffer.clear();
+                    continue;
+                }
+                if (buffer == "str") {
+                    tokens.push_back(
+                        { .type = TokenType::DATATYPE, .value = buffer, .position = { m_lineno, m_colno } });
+                    // std::cout << "Got str datatype " << buffer << std::endl;
+                    buffer.clear();
+                    continue;
+                }
+                if (buffer == "fn") {
+                    tokens.push_back({ .type = TokenType::FUNCTION, .position = { m_lineno, m_colno } });
+                    // std::cout << "Got FUNCTION " << buffer << std::endl;
+                    buffer.clear();
+                    continue;
+                }
+                if (buffer == "return") {
+                    tokens.push_back({ .type = TokenType::RETURN, .position = { m_lineno, m_colno } });
+                    // std::cout << "Got return " << buffer << std::endl;
                     buffer.clear();
                     continue;
                 }
@@ -200,6 +230,11 @@ public:
                 tokens.push_back({ .type = TokenType::INT_LT, .value = buffer, .position = { m_lineno, m_colno } });
                 // std::cout << "Got INT_LT " << buffer << std::endl;
                 buffer.clear();
+                continue;
+            }
+            if (peek().value() == ',') {
+                consume();
+                tokens.push_back({ .type = TokenType::COMMA, .position = { m_lineno, m_colno } });
                 continue;
             }
             if (peek().value() == '(') {

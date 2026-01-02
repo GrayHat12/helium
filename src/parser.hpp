@@ -12,6 +12,21 @@ namespace Node {
 
 enum class VariableType { NUM, STR };
 
+VariableType tokenToDatatype(Token token)
+{
+    if (token.value.value() == "str") {
+        return VariableType::STR;
+    }
+    else if (token.value.value() == "num") {
+        return VariableType::NUM;
+    }
+    else {
+        std::cerr << "datatype " << token.value.value_or("NIL") << " not yet supported. error at "
+                  << token.position.first << ":" << token.position.second << std::endl;
+        exit(EXIT_FAILURE);
+    }
+}
+
 struct BaseNode {
     std::pair<size_t, size_t> position;
 
@@ -58,6 +73,10 @@ struct Identifier : BaseNode {
     }
 };
 struct Expression;
+struct FunctionCall : BaseNode {
+    Token ident;
+    std::vector<Expression*> arguments;
+};
 struct Operation : BaseNode {
     Expression* left_hand;
     Token oprator;
@@ -67,7 +86,7 @@ struct ParenthExpression : BaseNode {
     Expression* expression;
 };
 struct Term : BaseNode {
-    std::variant<IntLiteral*, StrLiteral*, Identifier*, ParenthExpression*> term;
+    std::variant<IntLiteral*, StrLiteral*, Identifier*, ParenthExpression*, FunctionCall*> term;
 };
 struct Expression : BaseNode {
     std::variant<Term*, Operation*> expression;
@@ -103,6 +122,16 @@ struct Expression : BaseNode {
                 pexout << "ParenthExpression{.expression="
                        << std::get<ParenthExpression*>(term->term)->expression->to_string().str() << "}";
                 termout << "Term{.expression=" << pexout.str() << "}";
+            }
+            else if (std::holds_alternative<FunctionCall*>(term->term)) {
+                auto fclexpression = std::get<FunctionCall*>(term->term);
+                std::stringstream fclout;
+                fclout << "FunctionCall{.ident=" << fclexpression->ident.to_string().str() << ",.arguments=[";
+                for (const auto expr : fclexpression->arguments) {
+                    fclout << expr->to_string().str() << ",";
+                }
+                fclout << "]}";
+                termout << "Term{.expression=" << fclout.str() << "}";
             }
             out << "Term{.term=" << termout.str() << "}";
         }
@@ -156,6 +185,15 @@ struct Exit : BaseNode {
         return out;
     }
 };
+struct Return : BaseNode {
+    Expression::Expression* expression;
+    [[nodiscard]] std::stringstream to_string() const
+    {
+        std::stringstream out;
+        out << "Return{.expression=" << expression->to_string().str() << "}";
+        return out;
+    }
+};
 struct Print : BaseNode {
     Expression::Expression* expression;
     [[nodiscard]] std::stringstream to_string() const
@@ -196,6 +234,25 @@ struct If : BaseNode {
     std::optional<Else*> else_;
 };
 
+struct Argument : BaseNode {
+    Token identifier;
+    VariableType datatype;
+
+    [[nodiscard]] std::stringstream to_string() const
+    {
+        std::stringstream out;
+        out << "Argument{.identifier=" << identifier.to_string().str() << ",.datatype=" << datatype << "}";
+        return out;
+    }
+};
+
+struct Function : BaseNode {
+    Token identifier;
+    std::vector<Argument*> arguments;
+    VariableType returnType;
+    Node::Scope* scope;
+};
+
 struct Else : BaseNode {
     std::variant<If*, Scope*> else_;
 };
@@ -205,7 +262,7 @@ struct While : BaseNode {
     Node::Scope* scope;
 };
 struct Statement : BaseNode {
-    std::variant<Exit*, Print*, Let*, Scope*, If*, Assignment*, While*> statement;
+    std::variant<Exit*, Print*, Let*, Scope*, If*, Assignment*, While*, Function*, Return*> statement;
 
     [[nodiscard]] std::stringstream to_string(If* ifnode) const
     {
@@ -250,11 +307,29 @@ struct Statement : BaseNode {
         return out;
     }
 
+    [[nodiscard]] std::stringstream to_string(Function* fnc) const
+    {
+        std::stringstream out;
+        out << "Function{.identifier=" << fnc->identifier.to_string().str() << ",.arguments=[";
+        for (const auto arg : fnc->arguments) {
+            out << arg->to_string().str() << ",";
+        }
+        out << "],returnType=" << fnc->returnType << ",scope=Scope{.stmts=[";
+        for (const auto stmt : fnc->scope->stmts) {
+            out << stmt->to_string().str() << ",";
+        }
+        out << "]}}";
+        return out;
+    }
+
     [[nodiscard]] std::stringstream to_string() const
     {
         std::stringstream out;
         if (std::holds_alternative<Exit*>(statement)) {
             out << "Statement{.statement=" << std::get<Exit*>(statement)->to_string().str() << "}";
+        }
+        else if (std::holds_alternative<Return*>(statement)) {
+            out << "Statement{.statement=" << std::get<Return*>(statement)->to_string().str() << "}";
         }
         else if (std::holds_alternative<Print*>(statement)) {
             out << "Statement{.statement=" << std::get<Print*>(statement)->to_string().str() << "}";
@@ -280,6 +355,10 @@ struct Statement : BaseNode {
         else if (std::holds_alternative<While*>(statement)) {
             auto whilenode = std::get<While*>(statement);
             out << "Statement{.statement=" << to_string(whilenode).str() << "}";
+        }
+        else if (std::holds_alternative<Function*>(statement)) {
+            auto funcnode = std::get<Function*>(statement);
+            out << "Statement{.statement=" << to_string(funcnode).str() << "}";
         }
         return out;
     }
@@ -349,6 +428,12 @@ private:
             node_expression->position = node_expression_int_lit->position;
             return node_expression;
         }
+        else if (auto fncall = parse_function_call()) {
+            auto node_expression = m_allocator->alloc<Node::Expression::Term>();
+            node_expression->term = fncall.value();
+            node_expression->position = fncall.value()->position;
+            return node_expression;
+        }
         else if (peek().has_value() && peek().value().type == TokenType::IDENT) {
             auto node_expression_identifier = m_allocator->alloc<Node::Expression::Identifier>();
             node_expression_identifier->ident = consume().value();
@@ -399,6 +484,41 @@ private:
             return {};
         }
     }
+
+    std::optional<Node::Expression::FunctionCall*> parse_function_call()
+    {
+        if (peek().value().type == TokenType::IDENT && peek(1).has_value()
+            && peek(1).value().type == TokenType::OPEN_PAREN) {
+            auto identifier = consume().value();
+            consume();
+            auto fn_call_node = m_allocator->alloc<Node::Expression::FunctionCall>();
+            fn_call_node->ident = identifier;
+            fn_call_node->position = identifier.position;
+            if (auto expression = parse_expression()) {
+                fn_call_node->arguments.push_back(expression.value());
+                while (peek().has_value() && peek().value().type == TokenType::COMMA) {
+                    consume();
+                    expression = parse_expression();
+                    if (!expression.has_value()) {
+                        std::cerr << "wat dis comma for ya dimwit " << current_position().str() << std::endl;
+                        exit(EXIT_FAILURE);
+                    }
+                    fn_call_node->arguments.push_back(expression.value());
+                }
+            }
+            if (peek().has_value() && peek().value().type == TokenType::CLOSE_PAREN) {
+                consume();
+                return fn_call_node;
+            }
+            else {
+                std::cerr << "wat dis shit ya conk " << current_position().str() << std::endl;
+                exit(EXIT_FAILURE);
+            }
+        }
+
+        return {};
+    }
+
     std::optional<Node::Expression::Expression*> parse_expression(size_t min_prec = 0)
     {
         std::optional<Node::Expression::Term*> term_lhs = parse_term();
@@ -526,6 +646,42 @@ private:
         return op_print_node;
     }
 
+    std::optional<Node::Statement::Return*> parse_return()
+    {
+        std::optional<Node::Statement::Return*> op_return_node;
+        if (peek().value().type == TokenType::RETURN) {
+            auto returntoken = consume().value();
+            auto return_node = m_allocator->alloc<Node::Statement::Return>();
+            return_node->position = returntoken.position;
+            if (auto node_expr = parse_expression()) {
+                return_node->expression = node_expr.value();
+            }
+            else {
+                auto default_exp = m_allocator->alloc<Node::Expression::Expression>();
+                auto default_value = m_allocator->alloc<Node::Expression::IntLiteral>();
+                auto default_term = m_allocator->alloc<Node::Expression::Term>();
+                default_value->int_lit.type = TokenType::INT_LT;
+                default_value->int_lit.value = "0";
+                default_term->term = default_value;
+                default_exp->expression = default_term;
+                return_node->expression = default_exp;
+            }
+
+            // consume semicolon
+            if (!peek().has_value() || peek().value().type != TokenType::SEMICL) {
+                std::cerr << "ya messed up ya semicolon twat " << current_position().str() << std::endl;
+                exit(EXIT_FAILURE);
+            }
+            else {
+                consume();
+            }
+
+            return return_node;
+        }
+
+        return {};
+    }
+
     std::optional<Node::Statement::Let*> parse_let()
     {
         std::optional<Node::Statement::Let*> op_let_node = {};
@@ -601,6 +757,29 @@ private:
         }
 
         return op_assign_node;
+    }
+
+    std::optional<Node::Statement::Argument*> parse_argument()
+    {
+        std::optional<Node::Statement::Argument*> op_argument_node = {};
+        // if (peek().has_value()) {
+        //     std::cout << "peek0 " << peek().value().to_string().str() << std::endl;
+        // }
+        // if (peek(1).has_value()) {
+        //     std::cout << "peek1 " << peek(1).value().to_string().str() << std::endl;
+        // }
+        if (peek().value().type == TokenType::IDENT && peek(1).has_value()
+            && peek(1).value().type == TokenType::DATATYPE) {
+            Token ident = consume().value();
+            Token datatype = consume().value();
+            auto nodeArgument = m_allocator->alloc<Node::Statement::Argument>();
+            nodeArgument->identifier = ident;
+            nodeArgument->position = ident.position;
+            nodeArgument->datatype = Node::tokenToDatatype(datatype);
+            return nodeArgument;
+        }
+
+        return op_argument_node;
     }
 
     std::optional<Node::Scope*> parse_scope()
@@ -699,12 +878,63 @@ private:
         return {};
     }
 
+    std::optional<Node::Statement::Function*> parse_function()
+    {
+        if (peek().value().type == TokenType::FUNCTION && peek(1).has_value()
+            && peek(1).value().type == TokenType::IDENT) {
+            Token function = consume().value();
+            Token ident = consume().value();
+            if (peek().has_value() && peek().value().type == TokenType::OPEN_PAREN) {
+                consume();
+            }
+            else {
+                std::cerr << "ya messed fn parenthesis ya bum" << std::endl;
+                exit(EXIT_FAILURE);
+            }
+            auto function_node = m_allocator->alloc<Node::Statement::Function>();
+            function_node->identifier = ident;
+            function_node->position = function.position;
+            while (auto argument = parse_argument()) {
+                function_node->arguments.push_back(argument.value());
+            }
+            if (peek().has_value() && peek().value().type == TokenType::CLOSE_PAREN) {
+                consume();
+            }
+            else {
+                std::cerr << "ya messed fn close parenthesis ya bum" << std::endl;
+                exit(EXIT_FAILURE);
+            }
+            if (peek().has_value() && peek().value().type == TokenType::DATATYPE) {
+                function_node->returnType = Node::tokenToDatatype(consume().value());
+            }
+            else {
+                std::cerr << "ya messed fn return type ya bum" << std::endl;
+                exit(EXIT_FAILURE);
+            }
+            auto scope = parse_scope();
+            if (!scope.has_value()) {
+                std::cerr << "ya missed the function body ya dick" << current_position().str() << std::endl;
+                exit(EXIT_FAILURE);
+            }
+            function_node->scope = scope.value();
+            return function_node;
+        }
+
+        return {};
+    }
+
     std::optional<Node::Statement::Statement*> parse_statement()
     {
         if (auto exit_node = parse_exit()) {
             auto node_statement = m_allocator->alloc<Node::Statement::Statement>();
             node_statement->statement = exit_node.value();
             node_statement->position = exit_node.value()->position;
+            return node_statement;
+        }
+        if (auto return_node = parse_return()) {
+            auto node_statement = m_allocator->alloc<Node::Statement::Statement>();
+            node_statement->statement = return_node.value();
+            node_statement->position = return_node.value()->position;
             return node_statement;
         }
         if (auto print_node = parse_print()) {
@@ -742,6 +972,12 @@ private:
             while_statement->statement = while_node.value();
             while_statement->position = while_node.value()->position;
             return while_statement;
+        }
+        if (auto fn_node = parse_function()) {
+            auto fn_statement = m_allocator->alloc<Node::Statement::Statement>();
+            fn_statement->statement = fn_node.value();
+            fn_statement->position = fn_node.value()->position;
+            return fn_statement;
         }
         return {};
         // std::cerr << "ya messed up wat ts shit" << std::endl;

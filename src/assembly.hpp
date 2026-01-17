@@ -147,6 +147,7 @@ private:
     void begin_scope()
     {
         m_scopes.push_back(m_variables.size());
+        m_code.start_nest();
     }
 
     void end_scope()
@@ -176,6 +177,7 @@ private:
             m_variables.pop_back();
         }
         m_scopes.pop_back();
+        m_code.end_nest();
     }
 
     std::string create_label()
@@ -258,7 +260,59 @@ private:
             };
             void operator()(const Node::Expression::FunctionCall* func_call) const
             {
-                assert(false && "not implemented");
+                // assert(false && "not implemented");
+
+                const std::string& func_name = func_call->ident.value.value();
+
+                // Look up the function in our metadata
+                auto it = std::ranges::find_if(generator.m_functions, [&](const Function& f) {
+                    return f.name == func_name;
+                });
+
+                if (it == generator.m_functions.end()) {
+                    std::cerr << "Calling undefined function: " << func_name << std::endl;
+                    exit(EXIT_FAILURE);
+                }
+
+                const auto& func_meta = *it;
+
+                if (func_call->arguments.size() != func_meta.argument_types.size()) {
+                    std::cerr << "invalid argument length for function call biatch " << func_name
+                              << func_call->current_position(" at ").str() << std::endl;
+                    exit(EXIT_FAILURE);
+                }
+
+                // 1. Push Arguments in reverse (Right-to-Left)
+                size_t bytes_pushed = 0;
+                for (int i = func_call->arguments.size() - 1; i >= 0; i--) {
+                    auto expected_type = func_meta.argument_types.at(i);
+                    auto injected_type = generator.infer_type(func_call->arguments[i]);
+                    if (expected_type != injected_type) {
+                        std::cerr << "invalid argument types for function call biatch " << func_name
+                                  << func_call->arguments[i]->current_position(" at ").str() << std::endl;
+                        exit(EXIT_FAILURE);
+                    }
+                    generator.generate_expression(func_call->arguments[i]);
+                    bytes_pushed += (injected_type == Node::VariableType::STR) ? 16 : 8;
+                }
+
+                // 2. Call
+                generator.m_code.generated << generator.m_code.get_tab() << "call __func__" << func_name << "\n";
+
+                // 3. Stack Cleanup
+                // if (bytes_pushed > 0) {
+                //     generator.m_code.generated << generator.m_code.get_tab() << "add rsp, " << bytes_pushed << "\n";
+                //     generator.m_stack_counter -= (bytes_pushed / 8);
+                // }
+
+                // 4. Handle Return Value
+                if (func_meta.return_type == Node::VariableType::STR) {
+                    generator.stack_push("rdx"); // Length
+                    generator.stack_push("rax"); // Pointer
+                }
+                else {
+                    generator.stack_push("rax");
+                }
             };
         };
 
@@ -293,6 +347,10 @@ private:
             }
             if (std::holds_alternative<Node::Expression::StrLiteral*>(term->term)) {
                 return Node::VariableType::STR;
+            }
+            if (std::holds_alternative<Node::Expression::FunctionCall*>(term->term)) {
+                return get_function_return_type(
+                    std::get<Node::Expression::FunctionCall*>(term->term)->ident.value.value());
             }
             if (auto* ident_ptr = std::get_if<Node::Expression::Identifier*>(&term->term)) {
                 // Look up existing variable type
@@ -415,6 +473,14 @@ private:
 
         ExpressionVisitor visitor = { .generator = *this };
         std::visit(visitor, expression->expression);
+    }
+
+    Node::VariableType get_function_return_type(const std::string& name)
+    {
+        const auto function = std::ranges::find_if(std::as_const(m_functions), [&](const Function& function) {
+            return function.name == name;
+        });
+        return function->return_type;
     }
 
     void generate_statement(const Node::Statement::Statement* statement)
@@ -575,7 +641,7 @@ private:
             {
                 Node::VariableType type = generator.infer_type(while_node->expression);
                 auto conditionlabel = generator.create_label();
-                generator.m_code.generated << conditionlabel << ":" << "\n";
+                generator.m_code.generated << generator.m_code.get_tab() << conditionlabel << ":" << "\n";
                 generator.generate_expression(while_node->expression);
                 if (type == Node::VariableType::STR) {
                     // Stack has: [Length, Pointer]
@@ -594,16 +660,117 @@ private:
                 generator.generate_scope(while_node->scope);
                 generator.m_code.generated << generator.m_code.get_tab() << "jmp " << conditionlabel << "\n";
 
-                generator.m_code.generated << skiplabel << ":" << "\n";
+                generator.m_code.generated << generator.m_code.get_tab() << skiplabel << ":" << "\n";
                 generator.m_code.generated << generator.m_code.get_tab() << "; outside while loop" << "\n";
             };
             void operator()(const Node::Statement::Function* function_definition) const
             {
-                assert(false && "not implemented");
+                // assert(false && "not implemented");
+
+                Function func;
+
+                func.name = function_definition->identifier.value.value();
+                std::string func_label = "__func__" + func.name;
+
+                func.label = func_label;
+                func.return_type = function_definition->returnType;
+                for (const auto& arg : function_definition->arguments) {
+                    func.argument_types.push_back(arg->datatype);
+                }
+                generator.m_functions.push_back(func);
+
+                auto funcendlabel = func_label + "__end__";
+
+                auto funcretlabel = func_label + "__ret__";
+
+                generator.m_code.generated << generator.m_code.get_tab() << "; jump to funcend" << "\n";
+                generator.m_code.generated << generator.m_code.get_tab() << "jmp " << funcendlabel << "\n";
+
+                generator.m_code.generated << generator.m_code.get_tab() << func_label << ":\n";
+
+                generator.begin_scope();
+                auto prev = generator.m_activeFunction;
+
+                generator.m_activeFunction = &func;
+
+                generator.stack_push("rbp"); // save old base pointer
+
+                generator.m_code.generated << generator.m_code.get_tab() << "mov rbp, rsp ; new base pointer\n";
+
+                size_t offset = 16;
+
+                for (const auto& arg : function_definition->arguments) {
+                    if (arg->datatype == Node::VariableType::NUM) {
+                        generator.m_code.generated << generator.m_code.get_tab() << "mov rax, [rbp+" << offset << "]\n";
+                        offset += 8;
+                    }
+                    else if (arg->datatype == Node::VariableType::STR) {
+                        generator.m_code.generated
+                            << generator.m_code.get_tab() << "mov rsi, [rbp+" << offset << "]\n"; // pointer
+                        offset += 8;
+                        generator.m_code.generated
+                            << generator.m_code.get_tab() << "mov rdx, [rbp+" << offset << "]\n"; // length
+                        offset += 8;
+                    }
+                    else {
+                        assert(false && "not implemented");
+                    }
+                    generator.m_variables.push_back(
+                        {
+                            .name = arg->identifier.value.value(),
+                            .mutable_ = true,
+                            .stack_loc = generator.m_stack_counter,
+                            .type = arg->datatype,
+                        });
+                    if (arg->datatype == Node::VariableType::NUM) {
+                        generator.stack_push("rax");
+                    }
+                    else if (arg->datatype == Node::VariableType::STR) {
+                        generator.stack_push("rdx"); // length
+                        generator.stack_push("rsi"); // pointer
+                    }
+                    else {
+                        assert(false && "not implemented");
+                    }
+                }
+
+                for (const Node::Statement::Statement* stmt : function_definition->scope->stmts) {
+                    generator.generate_statement(stmt);
+                }
+
+                generator.m_code.generated << generator.m_code.get_tab() << "jmp " << funcretlabel << "\n";
+                generator.m_code.generated << generator.m_code.get_tab() << funcretlabel << ":\n";
+                generator.stack_pop("rbp");
+                generator.end_scope();
+                generator.m_code.generated << generator.m_code.get_tab() << "ret\n";
+
+                generator.m_code.generated << generator.m_code.get_tab() << funcendlabel << ":" << "\n";
+                generator.m_code.generated << generator.m_code.get_tab() << "; outside function" << "\n";
+                generator.m_activeFunction = prev;
             };
             void operator()(const Node::Statement::Return* return_stmt) const
             {
-                assert(false && "not implemented");
+                // assert(false && "not implemented");
+
+                if (generator.m_activeFunction != nullptr) {
+                    auto funcretlabel = generator.m_activeFunction->label + "__ret__";
+
+                    Node::VariableType type = generator.infer_type(return_stmt->expression);
+                    generator.generate_expression(return_stmt->expression);
+
+                    if (type == Node::VariableType::STR) {
+                        generator.stack_pop("rax"); // Pointer
+                        generator.stack_pop("rdx"); // Length
+                    }
+                    else {
+                        generator.stack_pop("rax");
+                    }
+
+                    generator.m_code.generated << generator.m_code.get_tab() << "jmp " << funcretlabel << "\n";
+                }
+                else {
+                    assert(false && "should never happen");
+                }
             };
         };
 
@@ -622,6 +789,13 @@ private:
         std::string value;
     };
 
+    struct Function {
+        std::string label;
+        std::string name;
+        Node::VariableType return_type;
+        std::vector<Node::VariableType> argument_types;
+    };
+
     std::stringstream coutmap() const
     {
         std::stringstream out;
@@ -636,8 +810,10 @@ private:
     size_t m_stack_counter = 0;
     std::vector<Variable> m_variables {};
     std::vector<StringConstant> m_strings {};
+    std::vector<Function> m_functions {};
     std::vector<size_t> m_scopes {};
     ArenaAllocator* m_allocator;
     int m_label_count = 0;
+    Function* m_activeFunction = nullptr;
     code m_code;
 };

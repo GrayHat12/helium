@@ -1,8 +1,11 @@
-let mut x = 100;
+let x = 75;
 
-while x-69 {
-    x = x - 1;
-    print("" + x + "\n");
+fn test(y num g str ex num) num {
+    while y - ex {
+        print(g + y + "\n");
+        y = y - 1;
+    }
+    return y;
 }
 
-exit(x - 69);
+exit(test(x, "hello ", 69));

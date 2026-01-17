@@ -282,7 +282,7 @@ private:
                     exit(EXIT_FAILURE);
                 }
 
-                // 1. Push Arguments in reverse (Right-to-Left)
+                // Push Arguments in reverse (Right-to-Left)
                 size_t bytes_pushed = 0;
                 for (int i = func_call->arguments.size() - 1; i >= 0; i--) {
                     auto expected_type = func_meta.argument_types.at(i);
@@ -296,16 +296,10 @@ private:
                     bytes_pushed += (injected_type == Node::VariableType::STR) ? 16 : 8;
                 }
 
-                // 2. Call
+                // Call
                 generator.m_code.generated << generator.m_code.get_tab() << "call __func__" << func_name << "\n";
 
-                // 3. Stack Cleanup
-                // if (bytes_pushed > 0) {
-                //     generator.m_code.generated << generator.m_code.get_tab() << "add rsp, " << bytes_pushed << "\n";
-                //     generator.m_stack_counter -= (bytes_pushed / 8);
-                // }
-
-                // 4. Handle Return Value
+                // Handle Return Value
                 if (func_meta.return_type == Node::VariableType::STR) {
                     generator.stack_push("rdx"); // Length
                     generator.stack_push("rax"); // Pointer

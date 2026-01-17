@@ -1,82 +1,60 @@
 #pragma once
 
 #include "./parser.hpp"
+#include "./static.hpp"
 #include <cassert>
 #include <ranges>
 #include <utility>
 #include <variant>
 
-const std::string RuntimeHelper = R"(
-section .bss
-    ; A small buffer for itoa conversions (max 20 digits for 64-bit int)
-    itoa_buf resb 24 
-    ; Store the current heap pointer
-    heap_ptr resq 1
+class code {
+public:
+    std::stringstream generated;
 
-section .text
+    code()
+    {
+        std::string embedCode = "; %HELIUM_CODE% ;";
+        size_t loc = EMBEDDED_DATA.find(embedCode);
+        pref = EMBEDDED_DATA.substr(0, loc);
+        post = EMBEDDED_DATA.substr(loc + embedCode.length());
 
-; --- itoa: converts RAX to string ---
-; Returns: RAX = pointer, RDX = length
-_itoa:
-    mov rbx, 10
-    mov rcx, itoa_buf + 23
-    xor rsi, rsi
-.loop:
-    xor rdx, rdx
-    div rbx
-    add dl, '0'
-    dec rcx
-    mov [rcx], dl
-    inc rsi
-    test rax, rax
-    jnz .loop
-    mov rax, rcx
-    mov rdx, rsi
-    ret
+        // 4 spaces for a tab
+        auto lastnline = pref.find_last_of('\n');
+        tabs = pref.substr(lastnline).length() / 4;
+        pref = pref.substr(0, lastnline);
+    }
 
-; --- runtime_concat ---
-; Inputs: R15/R14 (LHS ptr/len), R13/R12 (RHS ptr/len)
-; Returns: RAX (new ptr), RDX (total len)
-_runtime_concat:
-    ; 1. Calculate total length
-    mov rdx, r14
-    add rdx, r12
-    push rdx            ; Save total length to return later
+    std::string get_tab()
+    {
+        std::stringstream tab;
+        for (auto i = 0; i < tabs; i++) {
+            tab << "    ";
+        }
+        return tab.str();
+    }
 
-    ; 2. Get current heap break if not initialized
-    mov rax, [heap_ptr]
-    test rax, rax
-    jnz .allocate
-    mov rax, 12         ; sys_brk
-    xor rdi, rdi        ; 0 returns current break
-    syscall
-    mov [heap_ptr], rax
+    void start_nest()
+    {
+        tabs += 1;
+    }
 
-.allocate:
-    mov rdi, [heap_ptr]
-    add rdi, [rsp]      ; new break = old break + total length
-    mov rax, 12         ; sys_brk
-    syscall             ; RAX now has the NEW break
-    
-    mov rbx, [heap_ptr] ; RBX = start of our new memory
-    mov [heap_ptr], rax ; Update heap_ptr for next call
-    
-    ; 3. Copy LHS
-    mov rsi, r15        ; src
-    mov rdi, rbx        ; dest
-    mov rcx, r14        ; len
-    rep movsb           ; copy bytes
-    
-    ; 4. Copy RHS
-    mov rsi, r13        ; src
-    ; RDI is already pointing to the end of LHS after rep movsb
-    mov rcx, r12        ; len
-    rep movsb
-    
-    mov rax, rbx        ; Return the start of the new string
-    pop rdx             ; Return the total length
-    ret
-)";
+    void end_nest()
+    {
+        tabs -= 1;
+    }
+
+    std::stringstream get_full_asm()
+    {
+        std::stringstream out;
+        out << pref << generated.str() << "\n" << get_tab() << post;
+        return out;
+    }
+
+private:
+    std::string pref;
+    std::string post;
+    size_t tabs;
+};
 
 std::string process_escape_sequences(const std::string& input, size_t& out_len)
 {
@@ -131,41 +109,38 @@ public:
 
     std::string generate_program()
     {
-        m_asmout.clear();
-        m_asmout << "global _start\n_start:\n";
+        m_code = code();
 
         for (const Node::Statement::Statement* statement : m_prog.stmts) {
             generate_statement(statement);
         }
 
         // default this runs
-        m_asmout << "    ; default execution\n";
-        m_asmout << "    mov rax, 60\n";
-        m_asmout << "    mov rdi, 0\n";
-        m_asmout << "    syscall\n";
+        m_code.generated << m_code.get_tab() << "; default execution\n";
+        m_code.generated << m_code.get_tab() << "mov rax, 60\n";
+        m_code.generated << m_code.get_tab() << "mov rdi, 0\n";
+        m_code.generated << m_code.get_tab() << "syscall\n";
         // static strings
         if (m_strings.size() > 0) {
-            m_asmout << "section .data\n";
+            m_code.generated << m_code.get_tab() << "section .data\n";
         }
         for (const auto str : m_strings) {
             size_t length = 0;
             std::string processed = process_escape_sequences(str.value, length);
-            m_asmout << "    " << str.label << " db \"" << processed << "\", 0\n";
+            m_code.generated << m_code.get_tab() << str.label << " db \"" << processed << "\", 0\n";
         }
-        // runtime helpers
-        m_asmout << RuntimeHelper << "\n";
-        return m_asmout.str();
+        return m_code.get_full_asm().str();
     }
 
 private:
     void stack_push(const std::string& reg)
     {
-        m_asmout << "    push " << reg << "\n";
+        m_code.generated << m_code.get_tab() << "push " << reg << "\n";
         m_stack_counter++;
     }
     void stack_pop(const std::string& reg)
     {
-        m_asmout << "    pop " << reg << "\n";
+        m_code.generated << m_code.get_tab() << "pop " << reg << "\n";
         m_stack_counter--;
     }
 
@@ -192,7 +167,7 @@ private:
         }
         // Adjust the physical stack pointer
         if (total_slots_to_pop > 0) {
-            m_asmout << "    add rsp, " << total_slots_to_pop * 8 << "\n";
+            m_code.generated << m_code.get_tab() << "add rsp, " << total_slots_to_pop * 8 << "\n";
             m_stack_counter -= total_slots_to_pop;
         }
 
@@ -224,14 +199,16 @@ private:
                               << std::endl;
                     exit(EXIT_FAILURE);
                 }
-                generator.m_asmout << "    ; generate identifier" << "\n";
+                generator.m_code.generated << generator.m_code.get_tab() << "; generate identifier" << "\n";
                 if (variable->type == Node::VariableType::STR) {
                     size_t len_offset = (generator.m_stack_counter - variable->stack_loc - 1) * 8;
-                    generator.m_asmout << "    mov rax, QWORD [rsp + " << len_offset << "]\n";
+                    generator.m_code.generated
+                        << generator.m_code.get_tab() << "mov rax, QWORD [rsp + " << len_offset << "]\n";
                     generator.stack_push("rax");
 
                     size_t ptr_offset = (generator.m_stack_counter - (variable->stack_loc + 1) - 1) * 8;
-                    generator.m_asmout << "    mov rax, QWORD [rsp + " << ptr_offset << "]\n";
+                    generator.m_code.generated
+                        << generator.m_code.get_tab() << "mov rax, QWORD [rsp + " << ptr_offset << "]\n";
                     generator.stack_push("rax");
                 }
                 else {
@@ -243,13 +220,14 @@ private:
             };
             void operator()(const Node::Expression::ParenthExpression* parenth_expression) const
             {
-                generator.m_asmout << "    ; generate parenthesis expression" << "\n";
+                generator.m_code.generated << generator.m_code.get_tab() << "; generate parenthesis expression" << "\n";
                 generator.generate_expression(parenth_expression->expression);
             };
             void operator()(const Node::Expression::IntLiteral* int_literal) const
             {
-                generator.m_asmout << "    ; generate literal" << "\n";
-                generator.m_asmout << "    mov rax, " << int_literal->int_lit.value.value() << "\n";
+                generator.m_code.generated << generator.m_code.get_tab() << "; generate literal" << "\n";
+                generator.m_code.generated
+                    << generator.m_code.get_tab() << "mov rax, " << int_literal->int_lit.value.value() << "\n";
                 generator.stack_push("rax");
             };
             void operator()(const Node::Expression::StrLiteral* str_literal) const
@@ -268,12 +246,14 @@ private:
                 generator.m_strings.push_back({ label, val });
 
                 // 4. Push the Length (Slot 1)
-                generator.m_asmout << "    mov rax, " << actual_len << " ; string length\n";
+                generator.m_code.generated
+                    << generator.m_code.get_tab() << "mov rax, " << actual_len << " ; string length\n";
                 generator.stack_push("rax");
 
                 // 5. Push the Address (Slot 2)
                 // 'lea' (Load Effective Address) gets the memory address of our label
-                generator.m_asmout << "    lea rax, [" << label << "] ; string pointer\n";
+                generator.m_code.generated
+                    << generator.m_code.get_tab() << "lea rax, [" << label << "] ; string pointer\n";
                 generator.stack_push("rax");
             };
             void operator()(const Node::Expression::FunctionCall* func_call) const
@@ -288,7 +268,7 @@ private:
 
     void generate_scope(const Node::Scope* scope)
     {
-        m_asmout << "    ; generate scope" << "\n";
+        m_code.generated << m_code.get_tab() << "; generate scope" << "\n";
         begin_scope();
         for (const Node::Statement::Statement* statement : scope->stmts) {
             generate_statement(statement);
@@ -335,7 +315,7 @@ private:
 
             void operator()(const Node::Expression::Term* term) const
             {
-                generator.m_asmout << "    ; generate term" << "\n";
+                generator.m_code.generated << generator.m_code.get_tab() << "; generate term" << "\n";
                 generator.generate_term(term);
             };
             void operator()(Node::Expression::Operation* operation) const
@@ -352,10 +332,11 @@ private:
                     }
                 }
 
-                generator.m_asmout << "    ; generate operation" << "\n";
+                generator.m_code.generated << generator.m_code.get_tab() << "; generate operation" << "\n";
                 if (operation->oprator.value.value() == "+") {
                     if (left_type == Node::VariableType::STR || right_type == Node::VariableType::STR) {
-                        generator.m_asmout << "    ; --- String Concatenation ---" << "\n";
+                        generator.m_code.generated
+                            << generator.m_code.get_tab() << "; --- String Concatenation ---" << "\n";
 
                         generator.generate_expression(operation->left_hand);
                         generator.generate_expression(operation->right_hand);
@@ -367,9 +348,9 @@ private:
                         }
                         else {
                             generator.stack_pop("rax");
-                            generator.m_asmout << "    call _itoa\n"; // Convert RAX to fat pointer in RAX/RDX
-                            generator.m_asmout << "    mov r13, rax\n";
-                            generator.m_asmout << "    mov r12, rdx\n";
+                            generator.m_code.generated << generator.m_code.get_tab() << "UINT2STR rax\n";
+                            generator.m_code.generated << generator.m_code.get_tab() << "mov r13, rsi\n";
+                            generator.m_code.generated << generator.m_code.get_tab() << "mov r12, rdx\n";
                         }
 
                         // 2. Pop LHS (could be 1 or 2 slots)
@@ -379,51 +360,51 @@ private:
                         }
                         else {
                             generator.stack_pop("rax");
-                            generator.m_asmout << "    call _itoa\n";
-                            generator.m_asmout << "    mov r15, rax\n";
-                            generator.m_asmout << "    mov r14, rdx\n";
+                            generator.m_code.generated << generator.m_code.get_tab() << "UINT2STR rax\n";
+                            generator.m_code.generated << generator.m_code.get_tab() << "mov r15, rsi\n";
+                            generator.m_code.generated << generator.m_code.get_tab() << "mov r14, rdx\n";
                         }
 
-                        generator.m_asmout << "    call _runtime_concat\n";
+                        generator.m_code.generated << generator.m_code.get_tab() << "CONCAT r14, r15, r12, r13\n";
                         // 4. Push resulting fat pointer
                         generator.stack_push("rdx"); // length
-                        generator.stack_push("rax"); // pointer
+                        generator.stack_push("rsi"); // pointer
                     }
                     else {
-                        generator.m_asmout << "    ; generate add" << "\n";
+                        generator.m_code.generated << generator.m_code.get_tab() << "; generate add" << "\n";
                         generator.generate_expression(operation->left_hand);
                         generator.generate_expression(operation->right_hand);
                         generator.stack_pop("rax");
                         generator.stack_pop("rbx");
-                        generator.m_asmout << "    add rax, rbx\n";
+                        generator.m_code.generated << generator.m_code.get_tab() << "add rax, rbx\n";
                         generator.stack_push("rax");
                     }
                 }
                 else if (operation->oprator.value.value() == "-") {
-                    generator.m_asmout << "    ; generate subtract" << "\n";
+                    generator.m_code.generated << generator.m_code.get_tab() << "; generate subtract" << "\n";
                     generator.generate_expression(operation->left_hand);
                     generator.generate_expression(operation->right_hand);
                     generator.stack_pop("rbx");
                     generator.stack_pop("rax");
-                    generator.m_asmout << "    sub rax, rbx\n";
+                    generator.m_code.generated << generator.m_code.get_tab() << "sub rax, rbx\n";
                     generator.stack_push("rax");
                 }
                 else if (operation->oprator.value.value() == "*") {
-                    generator.m_asmout << "    ; generate multiply" << "\n";
+                    generator.m_code.generated << generator.m_code.get_tab() << "; generate multiply" << "\n";
                     generator.generate_expression(operation->left_hand);
                     generator.generate_expression(operation->right_hand);
                     generator.stack_pop("rax");
                     generator.stack_pop("rbx");
-                    generator.m_asmout << "    mul rbx\n";
+                    generator.m_code.generated << generator.m_code.get_tab() << "mul rbx\n";
                     generator.stack_push("rax");
                 }
                 else if (operation->oprator.value.value() == "/") {
-                    generator.m_asmout << "    ; generate divide" << "\n";
+                    generator.m_code.generated << generator.m_code.get_tab() << "; generate divide" << "\n";
                     generator.generate_expression(operation->left_hand);
                     generator.generate_expression(operation->right_hand);
                     generator.stack_pop("rbx");
                     generator.stack_pop("rax");
-                    generator.m_asmout << "    div rbx\n";
+                    generator.m_code.generated << generator.m_code.get_tab() << "div rbx\n";
                     generator.stack_push("rax");
                 }
                 else {
@@ -443,15 +424,15 @@ private:
 
             void operator()(const Node::Statement::Exit* exit_node) const
             {
-                generator.m_asmout << "    ; generate exit" << "\n";
+                generator.m_code.generated << generator.m_code.get_tab() << "; generate exit" << "\n";
                 generator.generate_expression(exit_node->expression);
-                generator.m_asmout << "    mov rax, 60\n";
+                generator.m_code.generated << generator.m_code.get_tab() << "mov rax, 60\n";
                 generator.stack_pop("rdi");
-                generator.m_asmout << "    syscall\n";
+                generator.m_code.generated << generator.m_code.get_tab() << "syscall\n";
             };
             void operator()(const Node::Statement::Print* print_node) const
             {
-                generator.m_asmout << "    ; --- generate print ---" << "\n";
+                generator.m_code.generated << generator.m_code.get_tab() << "; --- generate print ---" << "\n";
 
                 Node::VariableType type = generator.infer_type(print_node->expression);
 
@@ -466,14 +447,10 @@ private:
                 else {
                     // Stack has: [Integer Value]
                     generator.stack_pop("rax");
-                    generator.m_asmout << "    call _itoa\n";
-                    generator.m_asmout << "    mov rsi, rax\n";
-                    generator.m_asmout << "    mov rdx, rdx\n";
+                    generator.m_code.generated << generator.m_code.get_tab() << "UINT2STR rax\n";
                 }
 
-                generator.m_asmout << "    mov rax, 1      ; sys_write\n";
-                generator.m_asmout << "    mov rdi, 1      ; stdout\n";
-                generator.m_asmout << "    syscall\n";
+                generator.m_code.generated << generator.m_code.get_tab() << "PRINT\n";
             };
             void operator()(const Node::Statement::Let* let_node) const
             {
@@ -487,7 +464,7 @@ private:
                     std::cerr << "ya reusin variables ya bitch" << let_node->current_position().str() << std::endl;
                     exit(EXIT_FAILURE);
                 }
-                generator.m_asmout << "    ; generate variable" << "\n";
+                generator.m_code.generated << generator.m_code.get_tab() << "; generate variable" << "\n";
                 generator.m_variables.push_back(
                     {
                         .name = let_node->identifier.value.value(),
@@ -521,23 +498,28 @@ private:
                               << std::endl;
                     exit(EXIT_FAILURE);
                 }
-                generator.m_asmout << "    ; reassign variable" << "\n";
+                generator.m_code.generated << generator.m_code.get_tab() << "; reassign variable" << "\n";
                 generator.generate_expression(assign_node->expression);
                 if (variable->type == Node::VariableType::STR) {
                     // Pop the new fat pointer (ptr, then len)
                     generator.stack_pop("rax"); // new ptr
                     generator.stack_pop("rbx"); // new len
 
-                    generator.m_asmout << "    mov [rsp + " << (generator.m_stack_counter - variable->stack_loc - 1) * 8
-                                       << "], rbx" << "\n";
-                    generator.m_asmout << "    mov [rsp + "
-                                       << (generator.m_stack_counter - (variable->stack_loc + 1) - 1) * 8 << "], rax"
-                                       << "\n";
+                    generator.m_code.generated
+                        << generator.m_code.get_tab() << "mov [rsp + "
+                        << (generator.m_stack_counter - variable->stack_loc - 1) * 8 << "], rbx"
+                        << "\n";
+                    generator.m_code.generated
+                        << generator.m_code.get_tab() << "mov [rsp + "
+                        << (generator.m_stack_counter - (variable->stack_loc + 1) - 1) * 8 << "], rax"
+                        << "\n";
                 }
                 else {
                     generator.stack_pop("rax");
-                    generator.m_asmout << "    mov [rsp + " << (generator.m_stack_counter - variable->stack_loc - 1) * 8
-                                       << "], rax" << "\n";
+                    generator.m_code.generated
+                        << generator.m_code.get_tab() << "mov [rsp + "
+                        << (generator.m_stack_counter - variable->stack_loc - 1) * 8 << "], rax"
+                        << "\n";
                 }
             };
             void operator()(const Node::Scope* scope_node) const
@@ -559,22 +541,22 @@ private:
                 }
                 auto elselabel = generator.create_label();
                 auto skiplabel = generator.create_label();
-                generator.m_asmout << "    test rax, rax" << "\n";
+                generator.m_code.generated << generator.m_code.get_tab() << "test rax, rax" << "\n";
                 if (if_node->else_.has_value()) {
-                    generator.m_asmout << "    ; jump to else" << "\n";
-                    generator.m_asmout << "    jz " << elselabel << "\n";
+                    generator.m_code.generated << generator.m_code.get_tab() << "; jump to else" << "\n";
+                    generator.m_code.generated << generator.m_code.get_tab() << "jz " << elselabel << "\n";
                 }
                 else {
-                    generator.m_asmout << "    ; jump to skip" << "\n";
-                    generator.m_asmout << "    jz " << skiplabel << "\n";
+                    generator.m_code.generated << generator.m_code.get_tab() << "; jump to skip" << "\n";
+                    generator.m_code.generated << generator.m_code.get_tab() << "jz " << skiplabel << "\n";
                 }
-                generator.m_asmout << "    ; inside if" << "\n";
+                generator.m_code.generated << generator.m_code.get_tab() << "; inside if" << "\n";
                 generator.generate_scope(if_node->scope);
-                generator.m_asmout << "    jmp " << skiplabel << "\n";
+                generator.m_code.generated << generator.m_code.get_tab() << "jmp " << skiplabel << "\n";
 
                 if (if_node->else_.has_value()) {
-                    generator.m_asmout << elselabel << ":" << "\n";
-                    generator.m_asmout << "    ; inside else" << "\n";
+                    generator.m_code.generated << elselabel << ":" << "\n";
+                    generator.m_code.generated << generator.m_code.get_tab() << "; inside else" << "\n";
                     if (std::holds_alternative<Node::Scope*>(if_node->else_.value()->else_)) {
                         auto scope = std::get<Node::Scope*>(if_node->else_.value()->else_);
                         generator.generate_scope(scope);
@@ -583,17 +565,17 @@ private:
                         auto elseifnode = std::get<Node::Statement::If*>(if_node->else_.value()->else_);
                         (*this)(elseifnode);
                     }
-                    generator.m_asmout << "    jmp " << skiplabel << "\n";
+                    generator.m_code.generated << generator.m_code.get_tab() << "jmp " << skiplabel << "\n";
                 }
 
-                generator.m_asmout << skiplabel << ":" << "\n";
-                generator.m_asmout << "    ; outside if-elif chain" << "\n";
+                generator.m_code.generated << skiplabel << ":" << "\n";
+                generator.m_code.generated << generator.m_code.get_tab() << "; outside if-elif chain" << "\n";
             };
             void operator()(const Node::Statement::While* while_node) const
             {
                 Node::VariableType type = generator.infer_type(while_node->expression);
                 auto conditionlabel = generator.create_label();
-                generator.m_asmout << conditionlabel << ":" << "\n";
+                generator.m_code.generated << conditionlabel << ":" << "\n";
                 generator.generate_expression(while_node->expression);
                 if (type == Node::VariableType::STR) {
                     // Stack has: [Length, Pointer]
@@ -605,15 +587,15 @@ private:
                     generator.stack_pop("rax");
                 }
                 auto skiplabel = generator.create_label();
-                generator.m_asmout << "    test rax, rax" << "\n";
-                generator.m_asmout << "    ; jump to skip" << "\n";
-                generator.m_asmout << "    jz " << skiplabel << "\n";
-                generator.m_asmout << "    ; inside while" << "\n";
+                generator.m_code.generated << generator.m_code.get_tab() << "test rax, rax" << "\n";
+                generator.m_code.generated << generator.m_code.get_tab() << "; jump to skip" << "\n";
+                generator.m_code.generated << generator.m_code.get_tab() << "jz " << skiplabel << "\n";
+                generator.m_code.generated << generator.m_code.get_tab() << "; inside while" << "\n";
                 generator.generate_scope(while_node->scope);
-                generator.m_asmout << "    jmp " << conditionlabel << "\n";
+                generator.m_code.generated << generator.m_code.get_tab() << "jmp " << conditionlabel << "\n";
 
-                generator.m_asmout << skiplabel << ":" << "\n";
-                generator.m_asmout << "    ; outside while loop" << "\n";
+                generator.m_code.generated << skiplabel << ":" << "\n";
+                generator.m_code.generated << generator.m_code.get_tab() << "; outside while loop" << "\n";
             };
             void operator()(const Node::Statement::Function* function_definition) const
             {
@@ -651,11 +633,11 @@ private:
     }
 
     const Node::Program m_prog;
-    std::stringstream m_asmout;
     size_t m_stack_counter = 0;
     std::vector<Variable> m_variables {};
     std::vector<StringConstant> m_strings {};
     std::vector<size_t> m_scopes {};
     ArenaAllocator* m_allocator;
     int m_label_count = 0;
+    code m_code;
 };

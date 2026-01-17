@@ -135,11 +135,13 @@ public:
 private:
     void stack_push(const std::string& reg)
     {
+        m_code.generated << m_code.get_tab() << "; add m_stack_counter=" << m_stack_counter << "\n";
         m_code.generated << m_code.get_tab() << "push " << reg << "\n";
         m_stack_counter++;
     }
     void stack_pop(const std::string& reg)
     {
+        m_code.generated << m_code.get_tab() << "; sub m_stack_counter=" << m_stack_counter << "\n";
         m_code.generated << m_code.get_tab() << "pop " << reg << "\n";
         m_stack_counter--;
     }
@@ -201,7 +203,9 @@ private:
                               << std::endl;
                     exit(EXIT_FAILURE);
                 }
-                generator.m_code.generated << generator.m_code.get_tab() << "; generate identifier" << "\n";
+                generator.m_code.generated << generator.m_code.get_tab() << "; generate identifier " << variable->name
+                                           << " " << variable->stack_loc << " " << generator.m_stack_counter << "\n";
+
                 if (variable->type == Node::VariableType::STR) {
                     size_t len_offset = (generator.m_stack_counter - variable->stack_loc - 1) * 8;
                     generator.m_code.generated
@@ -298,6 +302,11 @@ private:
 
                 // Call
                 generator.m_code.generated << generator.m_code.get_tab() << "call __func__" << func_name << "\n";
+
+                if (bytes_pushed > 0) {
+                    generator.m_code.generated
+                        << generator.m_code.get_tab() << "add rsp, " << bytes_pushed << " ; clean up args\n";
+                }
 
                 // Handle Return Value
                 if (func_meta.return_type == Node::VariableType::STR) {
@@ -682,6 +691,10 @@ private:
 
                 generator.m_code.generated << generator.m_code.get_tab() << func_label << ":\n";
 
+                auto prevStackPointer = generator.m_stack_counter;
+
+                generator.m_stack_counter = 0;
+
                 generator.begin_scope();
                 auto prev = generator.m_activeFunction;
 
@@ -715,6 +728,7 @@ private:
                             .mutable_ = true,
                             .stack_loc = generator.m_stack_counter,
                             .type = arg->datatype,
+                            // .argument = true,
                         });
                     if (arg->datatype == Node::VariableType::NUM) {
                         generator.stack_push("rax");
@@ -734,13 +748,19 @@ private:
 
                 generator.m_code.generated << generator.m_code.get_tab() << "jmp " << funcretlabel << "\n";
                 generator.m_code.generated << generator.m_code.get_tab() << funcretlabel << ":\n";
-                generator.stack_pop("rbp");
-                generator.end_scope();
+                // generator.end_scope();
+                // generator.stack_pop("rbp");
+                // generator.m_code.generated << generator.m_code.get_tab() << "ret\n";
+                generator.m_code.generated << generator.m_code.get_tab() << "mov rsp, rbp\n";
+                generator.m_code.generated << generator.m_code.get_tab() << "pop rbp\n";
                 generator.m_code.generated << generator.m_code.get_tab() << "ret\n";
+                generator.end_scope();
 
                 generator.m_code.generated << generator.m_code.get_tab() << funcendlabel << ":" << "\n";
                 generator.m_code.generated << generator.m_code.get_tab() << "; outside function" << "\n";
                 generator.m_activeFunction = prev;
+
+                generator.m_stack_counter = prevStackPointer;
             };
             void operator()(const Node::Statement::Return* return_stmt) const
             {
@@ -777,6 +797,8 @@ private:
         bool mutable_;
         size_t stack_loc;
         Node::VariableType type;
+
+        bool argument = false;
     };
     struct StringConstant {
         std::string label;

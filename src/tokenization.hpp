@@ -66,7 +66,7 @@ struct Token {
     [[nodiscard]] std::stringstream to_string() const
     {
         std::stringstream out;
-        out << "Token{.type=" << type << ", .value=" << value.value_or("nil") << "}";
+        out << "Token{.type=" << type << ", .value=\"" << value.value_or("nil") << "\"}";
         return out;
     }
 };
@@ -305,7 +305,7 @@ public:
                 consume();
                 continue;
             }
-            std::cerr << "ye or me messed up ya savagez" << current_position().str() << std::endl;
+            std::cerr << "ye or me messed up ya savagez " << current_position().str() << std::endl;
             exit(EXIT_FAILURE);
         }
         return tokens;

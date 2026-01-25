@@ -29,6 +29,7 @@ VariableType tokenToDatatype(Token token)
 
 struct BaseNode {
     std::pair<size_t, size_t> position;
+    unsigned int parent;
 
     [[nodiscard]] std::stringstream current_position(std::string prefix = "error at ") const
     {
@@ -59,7 +60,7 @@ struct StrLiteral : BaseNode {
     [[nodiscard]] std::stringstream to_string() const
     {
         std::stringstream out;
-        out << "StrLiteral{.str_lit=\"" << str_lit.to_string().str() << "\"}";
+        out << "StrLiteral{.str_lit=" << str_lit.to_string().str() << "}";
         return out;
     }
 };
@@ -417,35 +418,40 @@ public:
     }
 
 private:
-    std::optional<Node::Expression::Term*> parse_term()
+    std::optional<Node::Expression::Term*> parse_term(unsigned int parent = 0)
     {
         if (peek().has_value() && peek().value().type == TokenType::INT_LT) {
             auto node_expression_int_lit = m_allocator->alloc<Node::Expression::IntLiteral>();
+            node_expression_int_lit->parent = parent;
             node_expression_int_lit->int_lit = consume().value();
             node_expression_int_lit->position = node_expression_int_lit->position;
             auto node_expression = m_allocator->alloc<Node::Expression::Term>();
+            node_expression->parent = parent;
             node_expression->term = node_expression_int_lit;
             node_expression->position = node_expression_int_lit->position;
             return node_expression;
         }
-        else if (auto fncall = parse_function_call()) {
+        else if (auto fncall = parse_function_call(parent)) {
             auto node_expression = m_allocator->alloc<Node::Expression::Term>();
+            node_expression->parent = parent;
             node_expression->term = fncall.value();
             node_expression->position = fncall.value()->position;
             return node_expression;
         }
         else if (peek().has_value() && peek().value().type == TokenType::IDENT) {
             auto node_expression_identifier = m_allocator->alloc<Node::Expression::Identifier>();
+            node_expression_identifier->parent = parent;
             node_expression_identifier->ident = consume().value();
             node_expression_identifier->position = node_expression_identifier->position;
             auto node_expression = m_allocator->alloc<Node::Expression::Term>();
+            node_expression->parent = parent;
             node_expression->term = node_expression_identifier;
             node_expression->position = node_expression_identifier->position;
             return node_expression;
         }
         else if (peek().has_value() && peek().value().type == TokenType::OPEN_PAREN) {
             consume();
-            auto expr = parse_expression();
+            auto expr = parse_expression(0, parent);
             if (!expr.has_value()) {
                 std::cerr << "whers ya expression ya dimwit " << current_position().str() << std::endl;
                 exit(EXIT_FAILURE);
@@ -459,9 +465,11 @@ private:
                 exit(EXIT_FAILURE);
             }
             auto term_paren = m_allocator->alloc<Node::Expression::ParenthExpression>();
+            term_paren->parent = parent;
             term_paren->expression = expr.value();
             term_paren->position = term_paren->expression->position;
             auto term = m_allocator->alloc<Node::Expression::Term>();
+            term->parent = parent;
             term->term = term_paren;
             term->position = term_paren->position;
             return term;
@@ -472,9 +480,11 @@ private:
             && peek(2).value().type == TokenType::DINV_COMMA) {
             consume();
             auto node_expression_str_lit = m_allocator->alloc<Node::Expression::StrLiteral>();
+            node_expression_str_lit->parent = parent;
             node_expression_str_lit->str_lit = consume().value();
             node_expression_str_lit->position = node_expression_str_lit->position;
             auto node_expression = m_allocator->alloc<Node::Expression::Term>();
+            node_expression->parent = parent;
             node_expression->term = node_expression_str_lit;
             node_expression->position = node_expression_str_lit->position;
             consume();
@@ -485,20 +495,21 @@ private:
         }
     }
 
-    std::optional<Node::Expression::FunctionCall*> parse_function_call()
+    std::optional<Node::Expression::FunctionCall*> parse_function_call(unsigned int parent = 0)
     {
         if (peek().value().type == TokenType::IDENT && peek(1).has_value()
             && peek(1).value().type == TokenType::OPEN_PAREN) {
             auto identifier = consume().value();
             consume();
             auto fn_call_node = m_allocator->alloc<Node::Expression::FunctionCall>();
+            fn_call_node->parent = parent;
             fn_call_node->ident = identifier;
             fn_call_node->position = identifier.position;
-            if (auto expression = parse_expression()) {
+            if (auto expression = parse_expression(0, parent)) {
                 fn_call_node->arguments.push_back(expression.value());
                 while (peek().has_value() && peek().value().type == TokenType::COMMA) {
                     consume();
-                    expression = parse_expression();
+                    expression = parse_expression(0, parent);
                     if (!expression.has_value()) {
                         std::cerr << "wat dis comma for ya dimwit " << current_position().str() << std::endl;
                         exit(EXIT_FAILURE);
@@ -519,15 +530,16 @@ private:
         return {};
     }
 
-    std::optional<Node::Expression::Expression*> parse_expression(size_t min_prec = 0)
+    std::optional<Node::Expression::Expression*> parse_expression(size_t min_prec = 0, unsigned int parent = 0)
     {
-        std::optional<Node::Expression::Term*> term_lhs = parse_term();
+        std::optional<Node::Expression::Term*> term_lhs = parse_term(parent);
         // std::cout << "Entering with min_prec=" << min_prec << std::endl;
         if (!term_lhs.has_value()) {
             return {};
         }
 
         auto expr_lhs = m_allocator->alloc<Node::Expression::Expression>();
+        expr_lhs->parent = parent;
         expr_lhs->expression = term_lhs.value();
         expr_lhs->position = term_lhs.value()->position;
 
@@ -542,7 +554,7 @@ private:
             }
             Token op = consume().value();
             auto next_min_prec = precedence.value() + 1;
-            auto expr_rhs = parse_expression(next_min_prec);
+            auto expr_rhs = parse_expression(next_min_prec, parent);
 
             if (!expr_rhs.has_value()) {
                 std::cerr << "wers da rigt and expression ya neandrathal " << current_position().str() << std::endl;
@@ -550,7 +562,9 @@ private:
             }
 
             auto expr = m_allocator->alloc<Node::Expression::Expression>();
+            expr->parent = parent;
             auto operation = m_allocator->alloc<Node::Expression::Operation>();
+            operation->parent = parent;
 
             operation->oprator = op;
             operation->left_hand = expr_lhs;
@@ -566,7 +580,7 @@ private:
         return expr_lhs;
     }
 
-    std::optional<Node::Statement::Exit*> parse_exit()
+    std::optional<Node::Statement::Exit*> parse_exit(unsigned int parent = 0)
     {
         std::optional<Node::Statement::Exit*> op_exit_node;
         // std::cout << peek().value().type << " : " << peek().value().value.value_or("") << std::endl;
@@ -574,9 +588,10 @@ private:
             && peek(1).value().type == TokenType::OPEN_PAREN) {
             auto exittoken = consume();
             consume();
-            if (auto node_expr = parse_expression()) {
+            if (auto node_expr = parse_expression(0, parent)) {
                 // exit_node = Node::Statement::Exit{.expression = node_expr.value()};
                 auto exit_node = m_allocator->alloc<Node::Statement::Exit>();
+                exit_node->parent = parent;
                 exit_node->expression = node_expr.value();
                 op_exit_node = exit_node;
                 exit_node->position = exittoken.value().position;
@@ -607,15 +622,16 @@ private:
         return op_exit_node;
     }
 
-    std::optional<Node::Statement::Print*> parse_print()
+    std::optional<Node::Statement::Print*> parse_print(unsigned int parent = 0)
     {
         std::optional<Node::Statement::Print*> op_print_node;
         if (peek().value().type == TokenType::PRINT && peek(1).has_value()
             && peek(1).value().type == TokenType::OPEN_PAREN) {
             auto exittoken = consume();
             consume();
-            if (auto node_expr = parse_expression()) {
+            if (auto node_expr = parse_expression(0, parent)) {
                 auto print_node = m_allocator->alloc<Node::Statement::Print>();
+                print_node->parent;
                 print_node->expression = node_expr.value();
                 op_print_node = print_node;
                 print_node->position = exittoken.value().position;
@@ -646,20 +662,24 @@ private:
         return op_print_node;
     }
 
-    std::optional<Node::Statement::Return*> parse_return()
+    std::optional<Node::Statement::Return*> parse_return(unsigned int parent = 0)
     {
         std::optional<Node::Statement::Return*> op_return_node;
         if (peek().value().type == TokenType::RETURN) {
             auto returntoken = consume().value();
             auto return_node = m_allocator->alloc<Node::Statement::Return>();
+            return_node->parent = parent;
             return_node->position = returntoken.position;
-            if (auto node_expr = parse_expression()) {
+            if (auto node_expr = parse_expression(0, parent)) {
                 return_node->expression = node_expr.value();
             }
             else {
                 auto default_exp = m_allocator->alloc<Node::Expression::Expression>();
+                default_exp->parent = parent;
                 auto default_value = m_allocator->alloc<Node::Expression::IntLiteral>();
+                default_value->parent = parent;
                 auto default_term = m_allocator->alloc<Node::Expression::Term>();
+                default_term->parent = parent;
                 default_value->int_lit.type = TokenType::INT_LT;
                 default_value->int_lit.value = "0";
                 default_term->term = default_value;
@@ -682,7 +702,7 @@ private:
         return {};
     }
 
-    std::optional<Node::Statement::Let*> parse_let()
+    std::optional<Node::Statement::Let*> parse_let(unsigned int parent = 0)
     {
         std::optional<Node::Statement::Let*> op_let_node = {};
         // std::cout << "let " << peek().value().type << " : " << peek().value().value.value_or("") << std::endl;
@@ -701,8 +721,9 @@ private:
                 }
                 Token ident = consume().value(); // consume token
                 consume(); // consume equals
-                if (auto node_expr = parse_expression()) {
+                if (auto node_expr = parse_expression(0, parent)) {
                     auto let_node = m_allocator->alloc<Node::Statement::Let>();
+                    let_node->parent = parent;
                     let_node->identifier = ident;
                     let_node->expression = node_expr.value();
                     let_node->mutable_ = mutable_;
@@ -728,15 +749,16 @@ private:
         return op_let_node;
     }
 
-    std::optional<Node::Statement::Assignment*> parse_assign()
+    std::optional<Node::Statement::Assignment*> parse_assign(unsigned int parent = 0)
     {
         std::optional<Node::Statement::Assignment*> op_assign_node = {};
         if (peek().value().type == TokenType::IDENT && peek(1).has_value()
             && peek(1).value().type == TokenType::EQUALS) {
             Token ident = consume().value();
             consume();
-            if (auto node_expr = parse_expression()) {
+            if (auto node_expr = parse_expression(0, parent)) {
                 auto assign_node = m_allocator->alloc<Node::Statement::Assignment>();
+                assign_node->parent = parent;
                 assign_node->identifier = ident;
                 assign_node->expression = node_expr.value();
                 assign_node->position = ident.position;
@@ -759,7 +781,7 @@ private:
         return op_assign_node;
     }
 
-    std::optional<Node::Statement::Argument*> parse_argument()
+    std::optional<Node::Statement::Argument*> parse_argument(unsigned int parent = 0)
     {
         std::optional<Node::Statement::Argument*> op_argument_node = {};
         // if (peek().has_value()) {
@@ -773,6 +795,7 @@ private:
             Token ident = consume().value();
             Token datatype = consume().value();
             auto nodeArgument = m_allocator->alloc<Node::Statement::Argument>();
+            nodeArgument->parent = parent;
             nodeArgument->identifier = ident;
             nodeArgument->position = ident.position;
             nodeArgument->datatype = Node::tokenToDatatype(datatype);
@@ -782,13 +805,14 @@ private:
         return op_argument_node;
     }
 
-    std::optional<Node::Scope*> parse_scope()
+    std::optional<Node::Scope*> parse_scope(unsigned int parent = 0)
     {
         if (peek().has_value() && peek().value().type == TokenType::OPEN_CURLY) {
             auto curlytoken = consume();
             auto scope = m_allocator->alloc<Node::Scope>();
+            scope->parent = parent;
             scope->position = curlytoken.value().position;
-            while (auto statement = parse_statement()) {
+            while (auto statement = parse_statement(parent + 1)) {
                 scope->stmts.push_back(statement.value());
             }
             if (peek().has_value() && peek().value().type == TokenType::CLOSE_CURLY) {
@@ -803,18 +827,19 @@ private:
         return {};
     }
 
-    std::optional<Node::Statement::Else*> parse_else()
+    std::optional<Node::Statement::Else*> parse_else(unsigned int parent = 0)
     {
         if (peek().has_value() && peek().value().type == TokenType::ELSE) {
             auto elsetoken = consume().value();
             auto else_statement = m_allocator->alloc<Node::Statement::Else>();
+            else_statement->parent = parent;
             else_statement->position = elsetoken.position;
-            auto ifnode = parse_if();
+            auto ifnode = parse_if(parent);
             if (ifnode.has_value()) {
                 else_statement->else_ = ifnode.value();
             }
             else {
-                auto scope = parse_scope();
+                auto scope = parse_scope(parent);
                 if (!scope.has_value()) {
                     std::cerr << "if then wat mf. say it, type it. don't fuck it up " << current_position().str()
                               << std::endl;
@@ -827,49 +852,51 @@ private:
         return {};
     }
 
-    std::optional<Node::Statement::If*> parse_if()
+    std::optional<Node::Statement::If*> parse_if(unsigned int parent = 0)
     {
         if (peek().has_value() && peek().value().type == TokenType::IF) {
             // std::cout << "checking if " << peek().value().to_string().str() << std::endl;
             auto iftoken = consume().value();
-            auto expression = parse_expression();
+            auto expression = parse_expression(0, parent);
             if (!expression.has_value()) {
                 std::cerr << "if what mf! if what ? be clear" << current_position().str() << std::endl;
                 exit(EXIT_FAILURE);
             }
-            auto scope = parse_scope();
+            auto scope = parse_scope(parent);
             if (!scope.has_value()) {
                 std::cerr << "if then wat mf. say it, type it. don't fuck it up" << current_position().str()
                           << std::endl;
                 exit(EXIT_FAILURE);
             }
             auto if_statement = m_allocator->alloc<Node::Statement::If>();
+            if_statement->parent = parent;
             if_statement->position = iftoken.position;
             if_statement->expression = expression.value();
             if_statement->scope = scope.value();
-            auto else_statement = parse_else();
+            auto else_statement = parse_else(parent);
             if_statement->else_ = else_statement;
             return if_statement;
         }
         return {};
     }
 
-    std::optional<Node::Statement::While*> parse_while()
+    std::optional<Node::Statement::While*> parse_while(unsigned int parent = 0)
     {
         if (peek().has_value() && peek().value().type == TokenType::WHILE) {
             auto whiletoken = consume().value();
-            auto expression = parse_expression();
+            auto expression = parse_expression(0, parent);
             if (!expression.has_value()) {
                 std::cerr << "while what mf! while what ? be clear" << current_position().str() << std::endl;
                 exit(EXIT_FAILURE);
             }
-            auto scope = parse_scope();
+            auto scope = parse_scope(parent);
             if (!scope.has_value()) {
                 std::cerr << "while then wat mf. say it, type it. don't fuck it up" << current_position().str()
                           << std::endl;
                 exit(EXIT_FAILURE);
             }
             auto while_statement = m_allocator->alloc<Node::Statement::While>();
+            while_statement->parent = parent;
             while_statement->position = whiletoken.position;
             while_statement->expression = expression.value();
             while_statement->scope = scope.value();
@@ -878,7 +905,7 @@ private:
         return {};
     }
 
-    std::optional<Node::Statement::Function*> parse_function()
+    std::optional<Node::Statement::Function*> parse_function(unsigned int parent = 0)
     {
         if (peek().value().type == TokenType::FUNCTION && peek(1).has_value()
             && peek(1).value().type == TokenType::IDENT) {
@@ -892,9 +919,10 @@ private:
                 exit(EXIT_FAILURE);
             }
             auto function_node = m_allocator->alloc<Node::Statement::Function>();
+            function_node->parent = parent;
             function_node->identifier = ident;
             function_node->position = function.position;
-            while (auto argument = parse_argument()) {
+            while (auto argument = parse_argument(parent + 1)) {
                 function_node->arguments.push_back(argument.value());
             }
             if (peek().has_value() && peek().value().type == TokenType::CLOSE_PAREN) {
@@ -911,7 +939,7 @@ private:
                 std::cerr << "ya messed fn return type ya bum" << std::endl;
                 exit(EXIT_FAILURE);
             }
-            auto scope = parse_scope();
+            auto scope = parse_scope(parent + 1);
             if (!scope.has_value()) {
                 std::cerr << "ya missed the function body ya dick" << current_position().str() << std::endl;
                 exit(EXIT_FAILURE);
@@ -923,58 +951,67 @@ private:
         return {};
     }
 
-    std::optional<Node::Statement::Statement*> parse_statement()
+    std::optional<Node::Statement::Statement*> parse_statement(unsigned int parent = 0)
     {
-        if (auto exit_node = parse_exit()) {
+        if (auto exit_node = parse_exit(parent)) {
             auto node_statement = m_allocator->alloc<Node::Statement::Statement>();
+            node_statement->parent = parent;
             node_statement->statement = exit_node.value();
             node_statement->position = exit_node.value()->position;
             return node_statement;
         }
-        if (auto return_node = parse_return()) {
+        if (auto return_node = parse_return(parent)) {
             auto node_statement = m_allocator->alloc<Node::Statement::Statement>();
+            node_statement->parent = parent;
             node_statement->statement = return_node.value();
             node_statement->position = return_node.value()->position;
             return node_statement;
         }
-        if (auto print_node = parse_print()) {
+        if (auto print_node = parse_print(parent)) {
             auto node_statement = m_allocator->alloc<Node::Statement::Statement>();
+            node_statement->parent = parent;
             node_statement->statement = print_node.value();
             node_statement->position = print_node.value()->position;
             return node_statement;
         }
-        if (auto let_node = parse_let()) {
+        if (auto let_node = parse_let(parent)) {
             auto node_statement = m_allocator->alloc<Node::Statement::Statement>();
+            node_statement->parent = parent;
             node_statement->statement = let_node.value();
             node_statement->position = let_node.value()->position;
             return node_statement;
         }
-        if (auto assign_node = parse_assign()) {
+        if (auto assign_node = parse_assign(parent)) {
             auto node_statement = m_allocator->alloc<Node::Statement::Statement>();
+            node_statement->parent = parent;
             node_statement->statement = assign_node.value();
             node_statement->position = assign_node.value()->position;
             return node_statement;
         }
-        if (auto scope_node = parse_scope()) {
+        if (auto scope_node = parse_scope(parent)) {
             auto scope_statement = m_allocator->alloc<Node::Statement::Statement>();
+            scope_statement->parent = parent;
             scope_statement->statement = scope_node.value();
             scope_statement->position = scope_node.value()->position;
             return scope_statement;
         }
-        if (auto if_node = parse_if()) {
+        if (auto if_node = parse_if(parent)) {
             auto if_statement = m_allocator->alloc<Node::Statement::Statement>();
+            if_statement->parent = parent;
             if_statement->statement = if_node.value();
             if_statement->position = if_node.value()->position;
             return if_statement;
         }
-        if (auto while_node = parse_while()) {
+        if (auto while_node = parse_while(parent)) {
             auto while_statement = m_allocator->alloc<Node::Statement::Statement>();
+            while_statement->parent = parent;
             while_statement->statement = while_node.value();
             while_statement->position = while_node.value()->position;
             return while_statement;
         }
-        if (auto fn_node = parse_function()) {
+        if (auto fn_node = parse_function(parent)) {
             auto fn_statement = m_allocator->alloc<Node::Statement::Statement>();
+            fn_statement->parent = parent;
             fn_statement->statement = fn_node.value();
             fn_statement->position = fn_node.value()->position;
             return fn_statement;

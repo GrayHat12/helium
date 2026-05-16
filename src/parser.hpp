@@ -631,7 +631,7 @@ private:
             consume();
             if (auto node_expr = parse_expression(0, parent)) {
                 auto print_node = m_allocator->alloc<Node::Statement::Print>();
-                print_node->parent;
+                print_node->parent = parent;
                 print_node->expression = node_expr.value();
                 op_print_node = print_node;
                 print_node->position = exittoken.value().position;
@@ -732,7 +732,7 @@ private:
                     // Node::Statement::Let{.identifier = ident, .expression = node_expr.value()};
                 }
                 else {
-                    std::cerr << "ya messed up bitches " << current_position().str() << std::endl;
+                    std::cerr << "let needs an expression dimwit " << current_position().str() << std::endl;
                     exit(EXIT_FAILURE);
                 }
                 // consume semicolon

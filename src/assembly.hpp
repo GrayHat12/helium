@@ -482,6 +482,7 @@ private:
                     generator.generate_expression(operation->right_hand);
                     generator.stack_pop("rbx");
                     generator.stack_pop("rax");
+                    generator.m_code.generated << generator.m_code.get_tab() << "xor rdx, rdx\n";
                     generator.m_code.generated << generator.m_code.get_tab() << "div rbx\n";
                     generator.stack_push("rax");
                 }
@@ -500,6 +501,7 @@ private:
         const auto function = std::ranges::find_if(std::as_const(m_functions), [&](const Function& function) {
             return function.name == name;
         });
+        assert(function != m_functions.end() && "Should not happen");
         return function->return_type;
     }
 
@@ -729,7 +731,7 @@ private:
                     offset += arg_size;
                 }
 
-                generator.m_activeFunction = &func;
+                generator.m_activeFunction = &generator.m_functions.back();
 
                 for (const Node::Statement::Statement* statement : function_definition->scope->stmts) {
                     generator.generate_statement(statement);
@@ -801,10 +803,10 @@ private:
 
     const Node::Program m_prog;
     size_t m_stack_counter = 0;
-    std::vector<Variable> m_variables {};
-    std::vector<StringConstant> m_strings {};
-    std::vector<Function> m_functions {};
-    std::vector<size_t> m_scopes {};
+    std::vector<Variable> m_variables { };
+    std::vector<StringConstant> m_strings { };
+    std::vector<Function> m_functions { };
+    std::vector<size_t> m_scopes { };
     ArenaAllocator* m_allocator;
     int m_label_count = 0;
     Function* m_activeFunction = nullptr;

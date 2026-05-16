@@ -1,23 +1,33 @@
-fn isodd(v num) num {
-    if v - 2 {
-        let r = v / 2;
-        if v - (r * 2){
-            return 1; // is odd
-        }
-        return 0; // is even
-    } else {
-        return 0;
+// fn isodd(v num) num {
+//     if v - 2 {
+//         let r = v / 2;
+//         if v - (r * 2){
+//             return 1; // is odd
+//         }
+//         return 0; // is even
+//     } else {
+//         return 0;
+//     }
+// }
+
+// let mut idx = 1;
+// let maxidx = 10;
+
+// while maxidx - idx {
+//     if isodd(idx) {
+//         print(idx + "\n");
+//     }
+//     idx = idx + 1;
+// }
+
+// exit(69);
+
+fn fibonacci(curr num prev num count num) num {
+    if count {
+        print(curr + "\n");
+        return fibonacci(curr + prev, curr, count - 1);
     }
+    return 69;
 }
 
-let mut idx = 1;
-let maxidx = 10;
-
-while maxidx - idx {
-    if isodd(idx) {
-        print(idx + "\n");
-    }
-    idx = idx + 1;
-}
-
-exit(69);
+exit(fibonacci(0, 1, 10));

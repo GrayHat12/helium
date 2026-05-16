@@ -491,7 +491,7 @@ private:
             return node_expression;
         }
         else {
-            return {};
+            return { };
         }
     }
 
@@ -527,7 +527,7 @@ private:
             }
         }
 
-        return {};
+        return { };
     }
 
     std::optional<Node::Expression::Expression*> parse_expression(size_t min_prec = 0, unsigned int parent = 0)
@@ -535,7 +535,7 @@ private:
         std::optional<Node::Expression::Term*> term_lhs = parse_term(parent);
         // std::cout << "Entering with min_prec=" << min_prec << std::endl;
         if (!term_lhs.has_value()) {
-            return {};
+            return { };
         }
 
         auto expr_lhs = m_allocator->alloc<Node::Expression::Expression>();
@@ -625,6 +625,7 @@ private:
     std::optional<Node::Statement::Print*> parse_print(unsigned int parent = 0)
     {
         std::optional<Node::Statement::Print*> op_print_node;
+        // std::cout << "checking print " << peek().value().to_string().str() << std::endl;
         if (peek().value().type == TokenType::PRINT && peek(1).has_value()
             && peek(1).value().type == TokenType::OPEN_PAREN) {
             auto exittoken = consume();
@@ -699,12 +700,12 @@ private:
             return return_node;
         }
 
-        return {};
+        return { };
     }
 
     std::optional<Node::Statement::Let*> parse_let(unsigned int parent = 0)
     {
-        std::optional<Node::Statement::Let*> op_let_node = {};
+        std::optional<Node::Statement::Let*> op_let_node = { };
         // std::cout << "let " << peek().value().type << " : " << peek().value().value.value_or("") << std::endl;
         if (peek().value().type == TokenType::LET) {
             auto non_mutable = peek(1).has_value() && peek(1).value().type == TokenType::IDENT && peek(2).has_value()
@@ -751,7 +752,7 @@ private:
 
     std::optional<Node::Statement::Assignment*> parse_assign(unsigned int parent = 0)
     {
-        std::optional<Node::Statement::Assignment*> op_assign_node = {};
+        std::optional<Node::Statement::Assignment*> op_assign_node = { };
         if (peek().value().type == TokenType::IDENT && peek(1).has_value()
             && peek(1).value().type == TokenType::EQUALS) {
             Token ident = consume().value();
@@ -783,7 +784,7 @@ private:
 
     std::optional<Node::Statement::Argument*> parse_argument(unsigned int parent = 0)
     {
-        std::optional<Node::Statement::Argument*> op_argument_node = {};
+        std::optional<Node::Statement::Argument*> op_argument_node = { };
         // if (peek().has_value()) {
         //     std::cout << "peek0 " << peek().value().to_string().str() << std::endl;
         // }
@@ -808,13 +809,17 @@ private:
     std::optional<Node::Scope*> parse_scope(unsigned int parent = 0)
     {
         if (peek().has_value() && peek().value().type == TokenType::OPEN_CURLY) {
+            // std::cout << "checking scope " << peek().value().to_string().str() << std::endl;
             auto curlytoken = consume();
+            // std::cout << curlytoken.value_or("") << "\n";
+            // std::cout << "checking scope " << peek().value().to_string().str() << std::endl;
             auto scope = m_allocator->alloc<Node::Scope>();
             scope->parent = parent;
             scope->position = curlytoken.value().position;
             while (auto statement = parse_statement(parent + 1)) {
                 scope->stmts.push_back(statement.value());
             }
+            // std::cout << "checking scope end " << peek().value().to_string().str() << std::endl;
             if (peek().has_value() && peek().value().type == TokenType::CLOSE_CURLY) {
                 consume();
             }
@@ -824,7 +829,7 @@ private:
             }
             return scope;
         }
-        return {};
+        return { };
     }
 
     std::optional<Node::Statement::Else*> parse_else(unsigned int parent = 0)
@@ -849,7 +854,7 @@ private:
             }
             return else_statement;
         }
-        return {};
+        return { };
     }
 
     std::optional<Node::Statement::If*> parse_if(unsigned int parent = 0)
@@ -877,7 +882,7 @@ private:
             if_statement->else_ = else_statement;
             return if_statement;
         }
-        return {};
+        return { };
     }
 
     std::optional<Node::Statement::While*> parse_while(unsigned int parent = 0)
@@ -902,7 +907,7 @@ private:
             while_statement->scope = scope.value();
             return while_statement;
         }
-        return {};
+        return { };
     }
 
     std::optional<Node::Statement::Function*> parse_function(unsigned int parent = 0)
@@ -948,7 +953,7 @@ private:
             return function_node;
         }
 
-        return {};
+        return { };
     }
 
     std::optional<Node::Statement::Statement*> parse_statement(unsigned int parent = 0)
@@ -1016,7 +1021,7 @@ private:
             fn_statement->position = fn_node.value()->position;
             return fn_statement;
         }
-        return {};
+        return { };
         // std::cerr << "ya messed up wat ts shit" << std::endl;
         // exit(EXIT_FAILURE);
     }
@@ -1024,7 +1029,7 @@ private:
     [[nodiscard]] std::optional<Token> peek(const size_t ahead = 0) const
     {
         if (m_index + ahead >= m_tokens.size()) {
-            return {};
+            return { };
         }
         return m_tokens.at(m_index + ahead);
     }
@@ -1032,7 +1037,7 @@ private:
     std::optional<Token> consume()
     {
         if (m_index >= m_tokens.size()) {
-            return {};
+            return { };
         }
         auto token = m_tokens.at(m_index++);
         m_position = token.position;

@@ -109,3 +109,9 @@ just build
 ```sh
 ./build/helium test/test.he out && ./out; echo $?
 ```
+
+## Benchmark
+
+> ┗(＾0＾)┓
+
+[Here](./Benchmark.md)

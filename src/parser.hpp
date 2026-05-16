@@ -29,7 +29,7 @@ VariableType tokenToDatatype(Token token)
 
 struct BaseNode {
     std::pair<size_t, size_t> position;
-    unsigned int parent;
+    unsigned int parent = 0;
 
     [[nodiscard]] std::stringstream current_position(std::string prefix = "error at ") const
     {
@@ -675,17 +675,8 @@ private:
                 return_node->expression = node_expr.value();
             }
             else {
-                auto default_exp = m_allocator->alloc<Node::Expression::Expression>();
-                default_exp->parent = parent;
-                auto default_value = m_allocator->alloc<Node::Expression::IntLiteral>();
-                default_value->parent = parent;
-                auto default_term = m_allocator->alloc<Node::Expression::Term>();
-                default_term->parent = parent;
-                default_value->int_lit.type = TokenType::INT_LT;
-                default_value->int_lit.value = "0";
-                default_term->term = default_value;
-                default_exp->expression = default_term;
-                return_node->expression = default_exp;
+                std::cerr << "return what mofo, return what ??. Dick " << current_position().str() << std::endl;
+                exit(EXIT_FAILURE);
             }
 
             // consume semicolon

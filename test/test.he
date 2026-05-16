@@ -1,33 +1,66 @@
-// fn isodd(v num) num {
-//     if v - 2 {
-//         let r = v / 2;
-//         if v - (r * 2){
-//             return 1; // is odd
-//         }
-//         return 0; // is even
-//     } else {
-//         return 0;
-//     }
-// }
-
-// let mut idx = 1;
-// let maxidx = 10;
-
-// while maxidx - idx {
-//     if isodd(idx) {
-//         print(idx + "\n");
-//     }
-//     idx = idx + 1;
-// }
-
-// exit(69);
-
-fn fibonacci(curr num prev num count num) num {
-    if count {
-        print(curr + "\n");
-        return fibonacci(curr + prev, curr, count - 1);
+fn test_odd() num {
+    fn isodd(v num) num {
+        if v - 2 {
+            let r = v / 2;
+            if v - (r * 2){
+                return 1; // is odd
+            }
+            return 0; // is even
+        } else {
+            return 0;
+        }
     }
-    return 69;
+
+    let mut idx = 1;
+    let maxidx = 10;
+
+    while maxidx - idx {
+        if isodd(idx) {
+            print(idx + "\n");
+        }
+        idx = idx + 1;
+    }
+
+    exit(69);
+    return 0;
 }
 
-exit(fibonacci(0, 1, 10));
+fn test_fibonacci() num {
+    fn fibonacci(curr num prev num count num) num {
+        if count {
+            print(curr + "\n");
+            return fibonacci(curr + prev, curr, count - 1);
+        }
+        return 69;
+    }
+
+    fn fibonacci_v2(curr num prev num count num) num {
+        if count {
+            print(curr + "\n");
+            return curr + fibonacci_v2(curr + prev, curr, count - 1);
+        }
+        return 62; 
+    }
+
+    exit(fibonacci_v2(0, 1, 5));
+    return 0;
+}
+
+fn test_natural() num {
+    fn sum_natural_numbers(n num) num {
+        return (n * (n + 1)) / 2;
+    }
+
+    fn recursive_natural_sum(n num actual num) num {
+        if n {
+            return n + recursive_natural_sum(n - 1, actual);
+        } else {
+            return 69 - sum_natural_numbers(actual);
+        }
+    }
+
+    exit(recursive_natural_sum(5, 5));
+    return 0;
+}
+
+let x_ = test_natural();

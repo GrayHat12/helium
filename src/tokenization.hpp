@@ -79,7 +79,7 @@ inline std::optional<size_t> bin_precedence(const Token& token)
         }
         assert(false); // not supported;
     }
-    return {};
+    return { };
 }
 
 class Tokenizer {
@@ -98,7 +98,7 @@ public:
             // std::cout << "At " << m_index << " Char " << peek().value() << std::endl;
             if (std::isalpha(peek().value())) {
                 buffer.push_back(consume().value());
-                while (peek().has_value() && std::isalnum(peek().value())) {
+                while (peek().has_value() && (std::isalnum(peek().value()) || peek().value() == '_')) {
                     buffer.push_back(consume().value());
                 }
                 if (buffer == "exit") {
@@ -305,7 +305,8 @@ public:
                 consume();
                 continue;
             }
-            std::cerr << "ye or me messed up ya savagez " << current_position().str() << std::endl;
+            std::cerr << "ye or me messed up ya savagez \"" << peek().value() << "\"" << current_position().str()
+                      << std::endl;
             exit(EXIT_FAILURE);
         }
         return tokens;
@@ -315,7 +316,7 @@ private:
     [[nodiscard]] std::optional<char> peek(const size_t ahead = 0) const
     {
         if (m_index + ahead >= m_src.length()) {
-            return {};
+            return { };
         }
         return m_src.at(m_index + ahead);
     }
@@ -330,7 +331,7 @@ private:
     std::optional<char> consume()
     {
         if (m_index >= m_src.length()) {
-            return {};
+            return { };
         }
         auto c = m_src.at(m_index++);
         if (c == '\n') {

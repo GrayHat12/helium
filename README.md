@@ -2,6 +2,8 @@
 
 Just a language for me to understand writting compilers.
 
+![mascot](./docs/helium.png)
+
 ## Grammar
 
 ![Grammar](./Grammar.md)

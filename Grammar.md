@@ -1,4 +1,4 @@
-$$
+```math
 \begin{align}
     [\text{Prog}] &\to [\text{Stmt}]^* \\
     [\text{Scope}] &\to [\{\text{Stmt}]^* \} \\
@@ -55,4 +55,5 @@ $$
         \text{ident([\text{Expr},...])} \\
     \end{cases}
 \end{align}
-$$
+
+```
